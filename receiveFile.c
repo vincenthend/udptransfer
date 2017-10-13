@@ -53,13 +53,13 @@ int main (int argc, char* argv[]){
 
 		// Receive Data
 		while(1){
-			recv_len = recvfrom(my_sock, framebuf, 500, 0, NULL, NULL);
+		recv_len = recvfrom(my_sock, framebuf, 500, 0, NULL, NULL);
 			if (recv_len == -1){
 				printf("Error : Failed to receive data\n");
 				exit(1);
 			}
 			else{
-				printf("detected input\n");
+				printf("Data: %s\n" , framebuf);
 			}
 		}
 

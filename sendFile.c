@@ -26,7 +26,7 @@ int main (int argc, char* argv[]){
 		my_port = PORT;
 		
 		// Read arguments, Open file
-		dest_ipadr = inet_addr(argv[5]);
+		dest_ipadr = inet_addr(argv[4]);
 		sscanf(argv[5], "%d", &dest_port);
 
 		// Error checking of arguments
@@ -68,9 +68,11 @@ int main (int argc, char* argv[]){
 		socket_destination.sin_family = AF_INET;
 		socket_destination.sin_port = htons(dest_port);
 		socket_destination.sin_addr.s_addr = dest_ipadr;
+
+		printf("Sending to %s\n",inet_ntoa(socket_destination.sin_addr));
 		
 		// Send data
-		if (sendto(my_sock, msg, sizeof(msg), 0, (struct sockaddr*)&socket_destination, sizeof(socket_destination)) == -1){
+		if (sendto(my_sock, msg, sizeof(msg), 0, (struct sockaddr*) &socket_destination, sizeof(socket_destination)) == -1){
 			printf("Error : Failed to send data\n");
 			exit(1);
 		}

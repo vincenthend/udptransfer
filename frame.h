@@ -5,11 +5,20 @@ typedef struct{
 	uint8_t soh;
 	uint32_t seqnum;
 	uint8_t stx;
-	uint8_t data;
+	char data;
 	uint8_t etx;
 	int8_t checksum;
 } Frame;
 
-void initFrame(Frame* f, uint32_t seqnum, uint8_t data);
+typedef struct{
+	uint8_t ack;
+	uint32_t nextseq;
+	uint8_t advwinsize;
+	int8_t checksum;
+} ACK;
+
+void initFrame(Frame* f, uint32_t seqnum, char data);
+
+void initACK(ACK* f, uint32_t nextseq, uint8_t advwinsize);
 
 #endif

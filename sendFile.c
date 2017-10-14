@@ -56,6 +56,7 @@ int main (int argc, char* argv[]){
 		//  Segment Sending  //
 		///////////////////////
 		
+		while
 		// File to Segment
 		// Sementara char dulu ya~
 		msg[0] = 'h';

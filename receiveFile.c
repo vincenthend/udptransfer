@@ -45,9 +45,9 @@ int main (int argc, char* argv[]){
 			exit(1);
 		}
 		
-		///////////////////////
-		//  Frame Receiving  //
-		///////////////////////
+		/////////////////////////
+		//  Segment Receiving  //
+		/////////////////////////
 		
 		printf("Receiving on port :%d\n",my_port);
 
@@ -62,7 +62,6 @@ int main (int argc, char* argv[]){
 				printf("Data: %s\n" , framebuf);
 			}
 		}
-
 	}
 	return 0;
 }

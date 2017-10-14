@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
-#include "frame.h"
+#include "Frame.h"
 
 #define PORT 8000
 
@@ -52,11 +52,11 @@ int main (int argc, char* argv[]){
 			exit(1);
 		}
 		
-		/////////////////////
-		//  Frame Sending  //
-		/////////////////////
+		///////////////////////
+		//  Segment Sending  //
+		///////////////////////
 		
-		// File to Frame
+		// File to Segment
 		// Sementara char dulu ya~
 		msg[0] = 'h';
 		msg[1] = 'e';
@@ -69,7 +69,7 @@ int main (int argc, char* argv[]){
 		socket_destination.sin_port = htons(dest_port);
 		socket_destination.sin_addr.s_addr = dest_ipadr;
 
-		printf("Sending to %s\n",inet_ntoa(socket_destination.sin_addr));
+		printf("Sending to %s\n	",inet_ntoa(socket_destination.sin_addr));
 		
 		// Send data
 		if (sendto(my_sock, msg, sizeof(msg), 0, (struct sockaddr*) &socket_destination, sizeof(socket_destination)) == -1){

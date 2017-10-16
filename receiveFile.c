@@ -1,18 +1,18 @@
 #include <arpa/inet.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/socket.h>
 #include "frame.h"
-
-#define PORT 8000
 
 int main (int argc, char* argv[]){
 	int windowSize, bufferSize, advWindowSize;
 	int my_port, my_ipadr, my_sock;
 	int recv_len;
-	Segment* receivedSegment;
-	char* windowBuffer;
+	char received[9];
 	char* receiverBuffer;
+	Segment* receivedSegment;
 	ACK ack;
 	struct sockaddr_in socket_my, socket_sender;
 
@@ -35,8 +35,8 @@ int main (int argc, char* argv[]){
 		sscanf(argv[3], "%d", &bufferSize); // Buffer size
 		sscanf(argv[2], "%d", &windowSize); // Window size
 
-		windowBuffer = (char*) malloc(windowSize * sizeof(char));
 		receiverBuffer = (char*) malloc(bufferSize * sizeof(char));
+		//receivedSegment = (Segment*) malloc(sizeof(Segment));
 
 		// Init variables
 		lfr = -1;
@@ -73,14 +73,16 @@ int main (int argc, char* argv[]){
 
 		// Receive Data
 		while(1){
-			recv_len = recvfrom(my_sock, (char*) receivedSegment, 9, 0, (struct sockaddr *) &socket_sender, &slen);
+			recv_len = recvfrom(my_sock, received, sizeof(Segment), 0, (struct sockaddr *) &socket_sender, &slen);
+			fflush(stdout);
+			receivedSegment = (Segment*) &received;
 			if (recv_len != -1) {
 				//Process received data, check the checksum
 				if(receivedSegment->checksum == countSegmentChecksum(*receivedSegment)){
 					if(receivedSegment->seqnum > lfr && receivedSegment->seqnum <= laf){
 						//Check if the segment is the requested next, if it does put it in buffer
 						receiverBuffer[receivedSegment->seqnum] = receivedSegment->data;
-						printf("Seqnum: %d, Data: %c\n",receivedSegment->seqnum, receivedSegment->data);
+						printf("Received Seqnum: %d, Data: %c\n",receivedSegment->seqnum, receivedSegment->data);
 						if(nextSeq == receivedSegment->seqnum){
 							nextSeq = nextSeq + 1;
 							lfr = lfr + 1;
@@ -97,9 +99,17 @@ int main (int argc, char* argv[]){
 						}
 					}
 				}
+				else{
+					printf("Received Misc Data : ");
+					for(i = 0; i<8; i++){
+						printf("%x\n",*receivedSegment);
+					}
+					printf("\n");
+				}
 			}
 			else{
-				printf("Error : Failed to receive data\n");
+				printf("Error : %s\n", strerror(errno));
+				exit(1);
 			}
 		}
 	}

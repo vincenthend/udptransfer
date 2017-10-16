@@ -60,7 +60,7 @@ int main (int argc, char* argv[]){
 		socket_my.sin_addr.s_addr = htonl(INADDR_ANY);
 
 		// Binding socket address to port
-		if(bind(my_sock, (struct sockaddr*)&socket_my, sizeof(socket_my)) == -1){
+		if (bind(my_sock, (struct sockaddr*)&socket_my, sizeof(socket_my)) == -1){
 			printf("Error : Failed to bind socket\n");
 			exit(1);
 		}
@@ -74,7 +74,7 @@ int main (int argc, char* argv[]){
 		// Receive Data
 		while(1){
 			recv_len = recvfrom(my_sock, (char*) receivedSegment, 9, 0, (struct sockaddr *) &socket_sender, &slen);
-			if (recv_len != -1){
+			if (recv_len != -1) {
 				//Process received data, check the checksum
 				if(receivedSegment->checksum == countSegmentChecksum(*receivedSegment)){
 					if(receivedSegment->seqnum > lfr && receivedSegment->seqnum <= laf){

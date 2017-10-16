@@ -3,8 +3,7 @@
 /**
  * Melakukan inisialisasi pada Segment dengan seqnum dan data
  */
-void initSegment(Segment* s, uint32_t seqnum, char data)
-{
+void initSegment(Segment* s, uint32_t seqnum, char data) {
 	s->soh = 0x1;
 	s->seqnum = seqnum;
 	s->stx = 0x2;

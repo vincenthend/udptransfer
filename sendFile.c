@@ -1,3 +1,5 @@
+#define _BSD_SOURCE
+
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -61,6 +63,7 @@ struct sockaddr_in socket_sender, socket_destination;
 FILE* fptr;
 char* senderBuffer;
 char* statusTable;
+char* timeoutTable;
 Segment** windowBuffer;
 
 // Runtime variables
@@ -97,12 +100,13 @@ int main (int argc, char* argv[]) {
 	fileSize = fsize(fileName);
 	if (!fptr || fileSize == -1) {
 		handleError("Error: Unable to open file\n");
-	}	
+	}
 
 	// Set buffer
 	senderBuffer = (char*) malloc(bufferSize * sizeof(char));
 	windowBuffer = (Segment**) malloc(windowSize * sizeof(Segment*));
 	statusTable = (char*) malloc(windowSize * sizeof(char));
+	timeoutTable = (char*) malloc(windowSize * sizeof(char));
 
 	// Init runtime vars
 	lfs = -1;
@@ -179,14 +183,18 @@ void* sendFile() {
 	Segment* sentSegment;
 	char finish = 0;
 
-	while (!feof(fptr)) {
+	printf("%d %jd %d\n", lar, fileSize, (lar == -1 || lar < fileSize - 1));
+	while (lar == -1 || lar < fileSize - 1) {
 		// Read file
 		fread(senderBuffer, bufferSize, 1, fptr);
+		printf("hahaha");
 
 		// Initialize status table
 		for (int i = 0; i < windowSize; ++i) {
-			statusTable[i] == 1;
+			statusTable[i] = 1;
+			timeoutTable[i] = TIMEOUT;
 		}
+		printf("hehehe");
 
 		windowBufferPtr = 0;
 		int i = 0;
@@ -203,6 +211,7 @@ void* sendFile() {
 				windowBuffer[windowBufferPtr] = sentSegment;
 				statusTable[windowBufferPtr] = -1;
 			}
+			printf("LFS: %d, LAR: %d\n", lfs, lar);
 
 			// Send data
 			for (int j = 0; j < windowSize; ++j) {
@@ -212,8 +221,9 @@ void* sendFile() {
 					if (sent_len == -1) {
 						handleError("Error: Failed to send data\n");
 					}
-					printf("Data %d sent", seqnum - 1);
+					printf("Data %d sent\n", sentSegment->seqnum);
 					statusTable[j] = 0;
+					timeoutTable[j] = TIMEOUT;
 				}
 			}
 
@@ -228,6 +238,7 @@ void* sendFile() {
 				finish &= (statusTable[j] == 1);
 			}
 			finish |= (lar == fileSize - 1);
+			usleep(500000);
 		}
 	}
 
@@ -238,7 +249,7 @@ void* receiveAck() {
 	int recv_len;
 	ACK* ack;
 
-	while (lar < fileSize - 1) {
+	while (lar == -1 || lar < fileSize - 1) {
 		// Receive ACK
 		recv_len = recvfrom(my_sock, (char*) ack, 7, 0, (struct sockaddr*) &socket_destination, &slen);
 		if (recv_len != -1) {
@@ -255,11 +266,15 @@ void* receiveAck() {
 }
 
 void* timeout() {
-	while (lar < fileSize - 1) {
-		sleep(TIMEOUT);
+	while (lar == -1 || lar < fileSize - 1) {
+		sleep(1);
 		for (int i = 0; i < windowSize; ++i) {
-			if (statusTable[i] == 0)
-				statusTable[i] = -1;
+			if (timeoutTable[i] <= 0) {
+				if (statusTable[i] == 0)
+					statusTable[i] = -1;
+			} else {
+				timeoutTable[i]--;
+			}
 		}
 	}
 

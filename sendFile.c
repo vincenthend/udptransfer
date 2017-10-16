@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
-#include "Frame.h"
+#include "frame.h"
 
 #define PORT 8000
 

@@ -18,7 +18,8 @@ int main (int argc, char* argv[]){
 
 	//Runtime var
 	uint32_t nextSeq, lfr, laf, seqnumtoack;
-	int i;
+	int i, slen;
+	slen = sizeof(socket_sender);
 	
 	if(argc != 5){
 		printf("Usage : ./recvfile <filename> <windowsize> <buffersize> <port>\n");
@@ -72,25 +73,28 @@ int main (int argc, char* argv[]){
 
 		// Receive Data
 		while(1){
-			recv_len = recvfrom(my_sock, (char*) receivedSegment, 9, 0, (struct sockaddr *) &socket_sender, sizeof(socket_sender));
+			recv_len = recvfrom(my_sock, (char*) receivedSegment, 9, 0, (struct sockaddr *) &socket_sender, &slen);
 			if (recv_len != -1){
 				//Process received data, check the checksum
 				if(receivedSegment->checksum == countSegmentChecksum(*receivedSegment)){
 					if(receivedSegment->seqnum > lfr && receivedSegment->seqnum <= laf){
 						//Check if the segment is the requested next, if it does put it in buffer
-						receiverBuffer[seqnum] = receivedSegment->data;
+						receiverBuffer[receivedSegment->seqnum] = receivedSegment->data;
 						printf("Seqnum: %d, Data: %c\n",receivedSegment->seqnum, receivedSegment->data);
 						if(nextSeq == receivedSegment->seqnum){
 							nextSeq = nextSeq + 1;
 							lfr = lfr + 1;
 							laf = lfr + windowSize;
+							//Count 
 						}
 						
 						if (seqnumtoack < receivedSegment->seqnum){
 							seqnumtoack = receivedSegment->seqnum;
 						}
-						initACK(&ack, nextSeq, buffer);
-						sendto(my_sock, ack, sizeof(ack), 0, (struct sockaddr*) &socket_sender, sizeof(socket_sender)) == -1);
+						initACK(&ack, nextSeq, advWindowSize);
+						if(sendto(my_sock, &ack, sizeof(ack), 0, (struct sockaddr*) &socket_sender, sizeof(socket_sender)) == -1){
+							printf("Error : Failed to send ACK for seqnum %d\n", nextSeq);
+						}
 					}
 				}
 			}

@@ -55,15 +55,6 @@ int main (int argc, char* argv[]){
 		///////////////////////
 		//  Segment Sending  //
 		///////////////////////
-		
-		while
-		// File to Segment
-		// Sementara char dulu ya~
-		msg[0] = 'h';
-		msg[1] = 'e';
-		msg[2] = 'l';
-		msg[3] = 'l';
-		msg[4] = 'o';
 
 		// Setup Sending Address
 		socket_destination.sin_family = AF_INET;
@@ -73,9 +64,19 @@ int main (int argc, char* argv[]){
 		printf("Sending to %s\n	",inet_ntoa(socket_destination.sin_addr));
 		
 		// Send data
-		if (sendto(my_sock, msg, sizeof(msg), 0, (struct sockaddr*) &socket_destination, sizeof(socket_destination)) == -1){
-			printf("Error : Failed to send data\n");
-			exit(1);
+		while(1){
+			// Convert data to segment
+			
+			// Fill Sender Buffer
+			
+			// Send data
+			if(sendto(my_sock, msg, sizeof(msg), 0, (struct sockaddr*) &socket_destination, sizeof(socket_destination)) == -1){
+				printf("Error : Failed to send data\n");
+			}
+			
+			// Wait for ACK
+			
+			// Move buffer head
 		}
 	}
 	return 0;

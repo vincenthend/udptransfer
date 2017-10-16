@@ -7,15 +7,18 @@
 #define PORT 8000
 
 int main (int argc, char* argv[]){
-	int windowsize;
+	int windowSize, bufferSize, advWindowSize;
 	int my_port, my_ipadr, my_sock;
 	int recv_len;
 	Segment* receivedSegment;
-	Segment* receiverBuffer;
+	char* windowBuffer;
+	char* receiverBuffer;
 	ACK ack;
 	struct sockaddr_in socket_my, socket_sender;
 
-	uint32_t nextSeq, lfr, laf;
+	//Runtime var
+	uint32_t nextSeq, lfr, laf, seqnumtoack;
+	int i;
 	
 	if(argc != 5){
 		printf("Usage : ./recvfile <filename> <windowsize> <buffersize> <port>\n");
@@ -28,13 +31,17 @@ int main (int argc, char* argv[]){
 		
 		// Read arguments
 		sscanf(argv[4], "%d", &my_port); // Receiving port
-		sscanf(argv[3], "%d", &windowsize); // Window size
-		receiverBuffer = (Segment*) malloc(windowsize * sizeof(Segment));
+		sscanf(argv[3], "%d", &bufferSize); // Buffer size
+		sscanf(argv[2], "%d", &windowSize); // Window size
+
+		windowBuffer = (char*) malloc(windowSize * sizeof(char));
+		receiverBuffer = (char*) malloc(bufferSize * sizeof(char));
 
 		// Init variables
 		lfr = -1;
-		laf = windowSize;
+		laf = lfr + windowSize;
 		nextSeq = 0;
+		seqnumtoack = -1;
 		
 		/////////////////////
 		// Socket Creation //
@@ -69,15 +76,26 @@ int main (int argc, char* argv[]){
 			if (recv_len != -1){
 				//Process received data, check the checksum
 				if(receivedSegment->checksum == countSegmentChecksum(*receivedSegment)){
-					//Check if the segment is the requested next, if it does put it in buffer
-					if(nextSeq == receivedSegment->seqnum){
-						receiverBuffer[receivedSegment->seqnum - nextSeq] = *receivedSegment;
-						nextSeq = nextSeq + 1;
+					if(receivedSegment->seqnum > lfr && receivedSegment->seqnum <= laf){
+						//Check if the segment is the requested next, if it does put it in buffer
+						receiverBuffer[seqnum] = receivedSegment->data;
+						printf("Seqnum: %d, Data: %c\n",receivedSegment->seqnum, receivedSegment->data);
+						if(nextSeq == receivedSegment->seqnum){
+							nextSeq = nextSeq + 1;
+							lfr = lfr + 1;
+							laf = lfr + windowSize;
+						}
+						
+						if (seqnumtoack < receivedSegment->seqnum){
+							seqnumtoack = receivedSegment->seqnum;
+						}
+						initACK(&ack, nextSeq, buffer);
+						sendto(my_sock, ack, sizeof(ack), 0, (struct sockaddr*) &socket_sender, sizeof(socket_sender)) == -1);
 					}
-					
-					initACK(&ack, nextSeq, );
-					sendto(my_sock, ack, sizeof(ack), 0, (struct sockaddr*) &socket_sender, sizeof(socket_sender)) == -1);
 				}
+			}
+			else{
+				printf("Error : Failed to receive data\n");
 			}
 		}
 	}

@@ -364,6 +364,7 @@ void *receiveAck() {
 						statusTable[i % windowSize] = 1;
 					}
 					statusTable[fileSize] = 1;
+					status = 3;
 				}
 
 
@@ -397,10 +398,6 @@ void *receiveAck() {
 				printf("%d: %d\t| ", seqnum, statusTable[j]);
 			}
 			printf("\n");
-		}
-
-		if (status == 2 && lar == fileSize) {
-			status = 3;
 		}
 	}
 

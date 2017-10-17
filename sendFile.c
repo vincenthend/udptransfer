@@ -307,10 +307,20 @@ void *sendFile() {
 			i = -1;
 		}
 
+<<<<<<< HEAD
+			// Finish condition: all data sent successfully
+			finish = 1;
+			for (int j = 0; j < windowSize; ++j) {
+				finish &= (statusTable[j] == 1);
+			}
+			finish &= (lar == fileSize);
+			usleep(20000);
+=======
 		// Finish condition: all data sent successfully
 		finish = 1;
 		for (int j = 0; j < windowSize; ++j) {
 			finish &= (statusTable[j] == 1);
+>>>>>>> 03a480b41ca050467f714054b658a09334ad3720
 		}
 		finish &= (lar == fileSize);
 		usleep(1000);

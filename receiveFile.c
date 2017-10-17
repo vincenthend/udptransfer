@@ -106,30 +106,34 @@ int main (int argc, char* argv[]){
 				if(receivedSegment->checksum == countSegmentChecksum(*receivedSegment)){
 					seqnum = receivedSegment->seqnum;
 					
-					printf("Received Seqnum: %d, Data: %c\n",seqnum, receivedSegment->data);
+					printf("Received Seqnum: %d, Data: %x\n",seqnum, receivedSegment->data);
 					printf("LFR :%d ; LAF :%d\n",lfr, laf);
 					
-					if(seqnum >= lfr && seqnum <= laf){
+					if(seqnum % bufferSize >= lfr && seqnum % bufferSize <= laf){
 						//Check if the segment is the requested next, if it does put it in buffer
 						printf("Data in frame\n");
 						
 						if(nextSeq == seqnum){
+							printf("data seqnum correct\n");
 							receiverBuffer[seqnum] = receivedSegment->data;
 							//bufferTable[seqnum] = 0x1;
 							advWindowSize -= 1;
 							
-							nextSeq = receivedSegment->seqnum + 1;
-							if(receivedSegment->seqnum != 0){ //Padding
+							nextSeq = nextSeq + 1;
+							if(receivedSegment->seqnum % bufferSize != 0){ //Padding
 								lfr = lfr + 1;
 							}
 							laf = lfr + windowSize;
+							laf = (laf >= bufferSize) ? bufferSize - 1 : laf;
 						}
 						
-						printf("Sending ACK nextseq = %d to %s:%d\n", nextSeq, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
+						printf("Sending ACK nextseq = %d advwinsize = %d to %s:%d\n", nextSeq, advWindowSize, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
 						initACK(&ack, nextSeq, advWindowSize);
 						
 						if(advWindowSize == 0){
-							printf("\n\n\n\n\n\n");
+							advWindowSize = bufferSize;
+							lfr = 0;
+							laf = lfr + windowSize;
 							flushBuffer(file, receiverBuffer, bufferSize);
 							//initBufferTable(bufferTable, bufferSize, &advWindowSize);
 						}
@@ -172,6 +176,5 @@ void initBufferTable(char* bufferTable, int size, int * advWindowSize){
 }
 
 void flushBuffer(FILE* file, char* buffer, int size){
-	printf("bump");
 	fwrite(buffer, 1, size, file);
 }

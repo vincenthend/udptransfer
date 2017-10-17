@@ -13,7 +13,7 @@
 #include "frame.h"
 
 #define PORT 8000
-#define TIMEOUT 10000 // milliseconds
+#define TIMEOUT 3000 // milliseconds
 #define EOF_SEQNUM -1
 
 
@@ -131,7 +131,7 @@ int main(int argc, char *argv[]) {
 	// Initialize status table
 	for (int i = 0; i < windowSize; ++i) {
 		windowBuffer[i] = NULL;
-		statusTable[i] = 1;
+		statusTable[i] = -2;
 		timeoutTable[i] = TIMEOUT;
 	}
 
@@ -234,14 +234,15 @@ void *sendFile() {
 	int i = 0;
 	int sent_len;
 	Segment *sentSegment;
-	char finish;
+	char finish = 0;
+	char advanced = 1;
 	off_t dataPtr = readFile(0);
 	windowBufferPtr = 0;
 
 	while (!finish) {
 		// Convert data to segment
 		int currWindowSize = lfs - lar + (status < 2);
-		if ((currWindowSize <= windowSize) && (i < bufferSize) && (seqnum <= fileSize)) {
+		if ((currWindowSize < windowSize) && (i < bufferSize) && (seqnum <= fileSize) && advanced) {
 			sentSegment = (Segment*) malloc(sizeof(Segment));
 
 			// Fill segment
@@ -260,10 +261,15 @@ void *sendFile() {
 			} else {
 				lfs++;
 			}
+			advanced = 0;
 		}
 
 		// Send EOF if no more data to send
-		if (seqnum == fileSize + 1) {
+		finish = 1;
+		for (int j = 0; j < windowSize; ++j) {
+			finish &= (statusTable[j] == 1);
+		}
+		if (seqnum == fileSize + 1 && finish) {
 			// Create segment
 			sentSegment = (Segment*) malloc(sizeof(Segment));
 			initSegment(sentSegment, EOF_SEQNUM, 0x00);
@@ -290,8 +296,9 @@ void *sendFile() {
 
 		// Advance if smaller than window size and there's still data to send
 		currWindowSize = lfs - lar + (status < 2);
-		if ((currWindowSize <= windowSize) && (i < bufferSize) && (seqnum != EOF_SEQNUM)) {
+		if ((currWindowSize < windowSize) && (i < bufferSize) && (seqnum != EOF_SEQNUM)) {
 			windowBufferPtr = (windowBufferPtr + 1) % windowSize;
+			advanced = 1;
 		}
 
 		// Reread file if buffer runs out
@@ -316,10 +323,6 @@ void *sendFile() {
 	}
 	free(windowBuffer);
 
-	pthread_join(tidTimeout, NULL);
-	sleep(1);
-	pthread_join(tidReceiveAck, NULL);
-	sleep(1);
 	printf("Sender thread terminated\n");
 	pthread_exit(NULL);
 }
@@ -344,11 +347,26 @@ void *receiveAck() {
 			if (ack->nextseq == EOF_SEQNUM) {
 				windowBufferAckIndex = windowBufferPtr;
 			}
-			statusTable[windowBufferAckIndex] = 1;
+			if (windowBuffer[windowBufferAckIndex]->seqnum == ack->nextseq - 1) {
+				//statusTable[windowBufferAckIndex] = 1;
+			}
 
 			// Check if ACK is in order
 			if ((ack->nextseq - 1 == lar + 1) || (ack->nextseq == EOF_SEQNUM && lar == fileSize - 1)) {
 				// Received ACK = LAR + 1
+				for (int i = lar + 1; i < ack->nextseq; ++i) {
+					statusTable[i % windowSize] = 1;
+				}
+
+				// Special case: received ACK == EOF
+				if (ack->nextseq == EOF_SEQNUM) {
+					for (int i = lar + 1; i < fileSize; ++i) {
+						statusTable[i % windowSize] = 1;
+					}
+					statusTable[fileSize] = 1;
+				}
+
+
 				int tempLar = lar % windowSize;
 				char advance = 1;
 				for (int i = (tempLar + 1) % windowSize; i != tempLar && advance; i = (i + 1) % windowSize) {
@@ -386,8 +404,6 @@ void *receiveAck() {
 		}
 	}
 
-	pthread_join(tidTimeout, NULL);
-	sleep(1);
 	printf("Receiver thread terminated\n");
 	pthread_exit(NULL);
 }

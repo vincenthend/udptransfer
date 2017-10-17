@@ -14,7 +14,7 @@
 
 #define PORT 8000
 #define TIMEOUT 10
-#define EOF_SEQNUM -999
+#define EOF_SEQNUM -1
 
 
 //////////////////////////////////

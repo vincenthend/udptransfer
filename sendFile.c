@@ -13,7 +13,7 @@
 #include "frame.h"
 
 #define PORT 8000
-#define TIMEOUT 10
+#define TIMEOUT 10000 // milliseconds
 #define EOF_SEQNUM -1
 
 
@@ -32,8 +32,17 @@ void handleError(const char *msg);
  * Calculates size of file with path fileName
  *
  * @param fileName Path to file
+ * @return file size
  */
 off_t fsize(const char *fileName);
+
+/**
+ * Opens next batch of file and increments dataPtr accordingly
+ *
+ * @param dataPtr How many bytes of data have been read
+ * @return dataPtr incremented by bufferSize
+ */
+off_t readFile(off_t dataPtr);
 
 /**
  * Sends file to receiver using the Sliding Window protocol
@@ -67,8 +76,9 @@ struct sockaddr_in socket_sender, socket_destination;
 FILE *fptr;
 char *senderBuffer;
 char *statusTable;
-char *timeoutTable;
+uint32_t *timeoutTable;
 Segment **windowBuffer;
+char lastBuffer;
 char status;
 
 // Runtime variables
@@ -76,10 +86,11 @@ int windowBufferPtr;
 uint32_t lfs, lar;
 uint32_t seqnum;
 
+pthread_t tidSend, tidReceiveAck, tidTimeout;
+
 int main(int argc, char *argv[]) {
 	int dest_port, dest_ipadr, dest_sock;
 	char *fileName;
-	pthread_t tidSend, tidReceiveAck, tidTimeout;
 
 	if (argc != 6) {
 		handleError("Usage: ./sendfile <filename> <windowsize> <buffersize> <destination_ip> <destination_port>\n");
@@ -113,9 +124,9 @@ int main(int argc, char *argv[]) {
 	status = 0;
 
 	// Set buffer
-	windowBuffer = (Segment **) malloc(windowSize * sizeof(Segment *));
-	statusTable = (char *)malloc(windowSize * sizeof(char));
-	timeoutTable = (char *)malloc(windowSize * sizeof(char));
+	windowBuffer = (Segment**) malloc(windowSize * sizeof(Segment *));
+	statusTable = (char*) malloc(windowSize * sizeof(char));
+	timeoutTable = (uint32_t*) malloc(windowSize * sizeof(char));
 
 	// Initialize status table
 	for (int i = 0; i < windowSize; ++i) {
@@ -170,6 +181,10 @@ int main(int argc, char *argv[]) {
 	pthread_join(tidReceiveAck, NULL);
 	pthread_join(tidTimeout, NULL);
 
+	// Closing
+	printf("Closing files, freeing buffers\n");
+	free(senderBuffer);
+	free(statusTable);
 	fclose(fptr);
 	return 0;
 }
@@ -195,16 +210,17 @@ off_t fsize(const char *fileName) {
 
 off_t readFile(off_t dataPtr) {
 	if (dataPtr < fileSize) {
+		// Backup last buffer char
+		if (senderBuffer != NULL) {
+			lastBuffer = senderBuffer[bufferSize - 1];
+		}
+
 		// Set buffer
 		senderBuffer = (char*) malloc(bufferSize * sizeof(char));
 		dataPtr += bufferSize;
 
 		// Read file
 		fread(senderBuffer, bufferSize, 1, fptr);
-		for (int i = 0; i < bufferSize; ++i) {
-			printf("%x ", senderBuffer[i]);
-		}
-		printf("\n");
 		printf("Flushed buffer\n\n");
 
 	}
@@ -215,91 +231,95 @@ off_t readFile(off_t dataPtr) {
 void *sendFile() {
 	printf("Sender thread started\n");
 
+	int i = 0;
 	int sent_len;
 	Segment *sentSegment;
 	char finish;
-	off_t dataPtr = 0;
+	off_t dataPtr = readFile(0);
+	windowBufferPtr = 0;
 
-	while (status != 3) {
-		dataPtr = readFile(dataPtr);
-		windowBufferPtr = 0;
-		int i = 0;
-		finish = 0;
-		while (!finish) {
-			// Convert data to segment
-			int currWindowSize = lfs - lar + (status < 2);
-			if ((currWindowSize <= windowSize) && (i < bufferSize) && (seqnum <= fileSize)) {
-				sentSegment = (Segment*) malloc(sizeof(Segment));
-				initSegment(sentSegment, seqnum, senderBuffer[i]);
-				printf("Sending data %d: %c\n", seqnum, senderBuffer[i]);
+	while (!finish) {
+		// Convert data to segment
+		int currWindowSize = lfs - lar + (status < 2);
+		if ((currWindowSize <= windowSize) && (i < bufferSize) && (seqnum <= fileSize)) {
+			sentSegment = (Segment*) malloc(sizeof(Segment));
 
-				// Fill sender buffer
-				windowBuffer[windowBufferPtr] = sentSegment;
-				statusTable[windowBufferPtr] = -1;
+			// Fill segment
+			char data = (i == -1) ? lastBuffer : senderBuffer[i];
+			initSegment(sentSegment, seqnum, data);
 
-				// Advance pointers
-				seqnum++;
-				i++;
-				if (status == 0) {
-					status = 1;
-				} else {
-					lfs++;
-				}
+			// Fill sender buffer
+			windowBuffer[windowBufferPtr] = sentSegment;
+			statusTable[windowBufferPtr] = -1;
+
+			// Advance pointers
+			seqnum++;
+			i++;
+			if (status == 0) {
+				status = 1;
+			} else {
+				lfs++;
 			}
-
-			// Send EOF if no more data to send
-			if (seqnum == fileSize + 1) {
-				// Create segment
-				sentSegment = (Segment*) malloc(sizeof(Segment));
-				initSegment(sentSegment, EOF_SEQNUM, 0x00);
-
-				// Fill sender buffer
-				windowBuffer[windowBufferPtr] = sentSegment;
-				statusTable[windowBufferPtr] = -1;
-				seqnum = EOF_SEQNUM;
-			}
-
-			// Send data
-			for (int j = 0; j < windowSize; ++j) {
-				if (statusTable[j] == -1) {
-					sentSegment = windowBuffer[j];
-					sent_len = sendto(my_sock, sentSegment, sizeof(Segment), 0, (struct sockaddr *)&socket_destination, sizeof(socket_destination));
-					if (sent_len == -1) {
-						handleError("Error: Failed to send data\n");
-					}
-					printf("Data %d sent\n", sentSegment->seqnum);
-					statusTable[j] = 0;
-					timeoutTable[j] = TIMEOUT;
-				}
-			}
-
-			// Advance if smaller than window size and there's still data to send
-			currWindowSize = lfs - lar + (status < 2);
-			if ((currWindowSize <= windowSize) && (i < bufferSize) && (seqnum != EOF_SEQNUM)) {
-				windowBufferPtr = (windowBufferPtr + 1) % windowSize;
-			}
-
-			// Reread file if buffer runs out
-			if (i == bufferSize - 1) {
-				dataPtr = readFile(dataPtr);
-				i = -1;
-			}
-
-			// Finish condition: all data sent successfully
-			finish = 1;
-			for (int j = 0; j < windowSize; ++j) {
-				finish &= (statusTable[j] == 1);
-			}
-			finish &= (lar == fileSize);
-			usleep(1000);
 		}
 
-		free(senderBuffer);
-		free(windowBuffer);
-		free(statusTable);
-		free(timeoutTable);
+		// Send EOF if no more data to send
+		if (seqnum == fileSize + 1) {
+			// Create segment
+			sentSegment = (Segment*) malloc(sizeof(Segment));
+			initSegment(sentSegment, EOF_SEQNUM, 0x00);
+
+			// Fill sender buffer
+			windowBuffer[windowBufferPtr] = sentSegment;
+			statusTable[windowBufferPtr] = -1;
+			seqnum = EOF_SEQNUM;
+		}
+
+		// Send data
+		for (int j = 0; j < windowSize; ++j) {
+			if (statusTable[j] == -1) {
+				sentSegment = windowBuffer[j];
+				sent_len = sendto(my_sock, sentSegment, sizeof(Segment), 0, (struct sockaddr *)&socket_destination, sizeof(socket_destination));
+				if (sent_len == -1) {
+					handleError("Error: Failed to send data\n");
+				}
+				printf("Data %d sent: %c\n", sentSegment->seqnum, sentSegment->data);
+				statusTable[j] = 0;
+				timeoutTable[j] = TIMEOUT;
+			}
+		}
+
+		// Advance if smaller than window size and there's still data to send
+		currWindowSize = lfs - lar + (status < 2);
+		if ((currWindowSize <= windowSize) && (i < bufferSize) && (seqnum != EOF_SEQNUM)) {
+			windowBufferPtr = (windowBufferPtr + 1) % windowSize;
+		}
+
+		// Reread file if buffer runs out
+		if (i == bufferSize - 1) {
+			dataPtr = readFile(dataPtr);
+			i = -1;
+		}
+
+		// Finish condition: all data sent successfully
+		finish = 1;
+		for (int j = 0; j < windowSize; ++j) {
+			finish &= (statusTable[j] == 1);
+		}
+		finish &= (lar == fileSize);
+		usleep(1000);
 	}
 
+	// Free segments
+	for (int i = 0; i < windowSize; ++i) {
+		if (windowBuffer[i] != NULL)
+			free(windowBuffer[i]);
+	}
+	free(windowBuffer);
+
+	pthread_join(tidTimeout, NULL);
+	sleep(1);
+	pthread_join(tidReceiveAck, NULL);
+	sleep(1);
 	printf("Sender thread terminated\n");
 	pthread_exit(NULL);
 }
@@ -327,11 +347,9 @@ void *receiveAck() {
 			statusTable[windowBufferAckIndex] = 1;
 
 			// Check if ACK is in order
-			printf("lar: %d, filesize: %jd\n", lar, fileSize);
 			if ((ack->nextseq - 1 == lar + 1) || (ack->nextseq == EOF_SEQNUM && lar == fileSize - 1)) {
 				// Received ACK = LAR + 1
 				int tempLar = lar % windowSize;
-				printf("ACK in sequence %d\n", tempLar);
 				char advance = 1;
 				for (int i = (tempLar + 1) % windowSize; i != tempLar && advance; i = (i + 1) % windowSize) {
 					if (windowBuffer[i] != NULL) {
@@ -342,6 +360,7 @@ void *receiveAck() {
 					}
 				}
 
+				// Check if EOF is in sequence
 				int i = (lar + 1) % windowSize;
 				if (windowBuffer[i] != NULL) {
 					if (statusTable[i] == 1 && windowBuffer[i]->seqnum == EOF_SEQNUM) {
@@ -351,7 +370,7 @@ void *receiveAck() {
 			}
 
 			// Debug
-			 printf("Status table:\t| ");
+			printf("Status table:\t| ");
 			for (int j = 0; j < windowSize; ++j) {
 				int seqnum = -1;
 				if (windowBuffer[j] != NULL) {
@@ -367,6 +386,8 @@ void *receiveAck() {
 		}
 	}
 
+	pthread_join(tidTimeout, NULL);
+	sleep(1);
 	printf("Receiver thread terminated\n");
 	pthread_exit(NULL);
 }
@@ -375,9 +396,9 @@ void *timeout() {
 	printf("Timeout thread started\n");
 
 	while (status != 3) {
-		sleep(1);
+		usleep(1000);
 		for (int i = 0; i < windowSize; ++i) {
-			if (timeoutTable[i] <= 0) {
+			if (timeoutTable[i] == 0) {
 				if (statusTable[i] == 0)
 					statusTable[i] = -1;
 			} else {

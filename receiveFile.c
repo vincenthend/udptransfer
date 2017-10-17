@@ -8,18 +8,30 @@
 #include <string.h>
 #include "frame.h"
 
+/**
+ * Displays error message to stderr, then exits program with exitcode 1
+ *
+ * @param msg Error message
+ */
+void handleError();
+
+/**
+ * Initializes buffer table
+ */
+void initBufferTable(char* bufferTable, int size);
+
 int main (int argc, char* argv[]){
 	int windowSize, bufferSize, advWindowSize;
 	int my_port, my_ipadr, my_sock;
 	int recv_len;
+	char* bufferTable;
 	char* receiverBuffer;
-	char buf[500];
 	Segment* receivedSegment;
 	ACK ack;
 	struct sockaddr_in socket_my, socket_sender;
 
 	//Runtime var
-	uint32_t nextSeq, lfr, laf, seqnumtoack;
+	uint32_t nextSeq, lfr, laf, seqnumtoack, seqnum;
 	int i, slen;
 	slen = sizeof(socket_sender);
 	
@@ -36,10 +48,13 @@ int main (int argc, char* argv[]){
 		sscanf(argv[4], "%d", &my_port); // Receiving port
 		sscanf(argv[3], "%d", &bufferSize); // Buffer size
 		sscanf(argv[2], "%d", &windowSize); // Window size
-
+		
 		receiverBuffer = (char*) malloc(bufferSize * sizeof(char));
+		bufferTable = (char*) malloc(bufferSize * sizeof(char));
 		receivedSegment = (Segment*) malloc(sizeof(Segment));
-
+		
+		initBufferTable(bufferTable, sizeof(*bufferTable));
+		
 		// Init variables
 		lfr = 0;
 		laf = lfr + windowSize;
@@ -54,8 +69,7 @@ int main (int argc, char* argv[]){
 		// Initialize socket
 		my_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 		if(my_sock == -1){
-			printf("Error : Failed to initialize socket\n");
-			exit(1);
+			handleError();
 		}
 		
 		socket_my.sin_family = AF_INET;
@@ -66,9 +80,7 @@ int main (int argc, char* argv[]){
 		if (bind(my_sock, (struct sockaddr*)&socket_my, sizeof(socket_my)) == -1){
 			int enable = 1;
 			if (setsockopt(my_sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
-				printf("Socket error: %d, %s\n", errno, strerror(errno));
-				printf("Error : Failed to bind socket\n");
-				exit(1);
+				handleError();
 			}
 		}
 		
@@ -78,63 +90,71 @@ int main (int argc, char* argv[]){
 		
 		printf("Receiving on port :%d\n",my_port);
 		// Receive Data
-		while(1){
-			recv_len = recvfrom(my_sock, buf, 9, 0, (struct sockaddr *) &socket_sender, &slen);
-			//fflush(stdout);
+		do{
+			recv_len = recvfrom(my_sock, receivedSegment, 9, 0, (struct sockaddr *) &socket_sender, &slen);
+			fflush(stdout);
+			
 			if (recv_len != -1) {
-				receivedSegment = (Segment*) buf;
 				//Process received data, check the checksum
 				if(receivedSegment->checksum == countSegmentChecksum(*receivedSegment)){
-					printf("Received Seqnum: %d, Data: %c\n",receivedSegment->seqnum, receivedSegment->data);
+					seqnum = receivedSegment->seqnum;
+					
+					printf("Received Seqnum: %d, Data: %c\n",seqnum, receivedSegment->data);
 					printf("LFR :%d ; LAF :%d\n",lfr, laf);
-					if(receivedSegment->seqnum >= lfr && receivedSegment->seqnum <= laf){
+					
+					if(seqnum >= lfr && seqnum <= laf){
 						//Check if the segment is the requested next, if it does put it in buffer
-						receiverBuffer[receivedSegment->seqnum] = receivedSegment->data;
 						printf("Data in frame\n");
-						if(nextSeq == receivedSegment->seqnum){
+						if(bufferTable[seqnum] == 0x0){
+							receiverBuffer[seqnum] = receivedSegment->data;
+							bufferTable[seqnum] = 0x1;
+							advWindowSize -= 1;
+						}
+						
+						if(nextSeq == seqnum){
 							nextSeq = receivedSegment->seqnum + 1;
 							if(receivedSegment->seqnum != 0){ //Padding
 								lfr = lfr + 1;
 							}
 							laf = lfr + windowSize;
 						}
+						
 						if (seqnumtoack < receivedSegment->seqnum){
 							seqnumtoack = receivedSegment->seqnum;
 						}
-						printf("Sending ACK nextseq = %d to %s on port %d\n", nextSeq, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
+						printf("Sending ACK nextseq = %d to %s:%d\n", nextSeq, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
 						initACK(&ack, nextSeq, advWindowSize);
+						
 						if(sendto(my_sock, &ack, sizeof(ack), 0, (struct sockaddr*) &socket_sender, sizeof(socket_sender)) == -1){
 							printf("Error : Failed to send ACK for seqnum %d\n", nextSeq);
 						}
 					}
 				}
 				else{
-					printf("Received Misc Data: ");
-					//printf("%x ", *receivedSegment);
-					printf("\n");
+					printf("Received Misc Data: %x\n ", *receivedSegment);
 				}
 			}
 			else{
-				printf("Error : %s\n", strerror(errno));
-				exit(1);
+				handleError();
 			}
+		} while(seqnum != -1);
+		initACK(&ack, -1, advWindowSize);
+		printf("Sending ACK nextseq = %d to %s:%d\n", -1, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
+		if(sendto(my_sock, &ack, sizeof(ack), 0, (struct sockaddr*) &socket_sender, sizeof(socket_sender)) == -1){
+			printf("Error : Failed to send ACK for seqnum %d\n", nextSeq);
 		}
 	}
 	return 0;
 }
 
-// Glosarium
-/*
-	INADDR_ANY --> konstanta untuk any / 0.0.0.0
-	socket(domain, type, protocol) --> membuat socket
-	bind(socket, sockaddress, address_length) --> binding socket dengan port
-	
-	sockaddr_in --> struktur data sockaddress buat internet (ada sin_family (AF_INET --> address family), sin_port (port), sin_addr (IP address))
-	sendto(socket, message, message_length, flags, destination, destination_length) --> mengirim packet
-	recvfrom(socket, buffer, length, flags, address, length)
-	
-	
-	htons = host to network byte order (short)
-	htonl = host to network byte order (long)
-	
-*/
+void handleError(){
+	printf("Error : %s\n", strerror(errno));
+	exit(1);
+}
+
+void initBufferTable(char* bufferTable, int size){
+	int i;
+	for(i = 0; i<size; i++){
+		bufferTable[i] = 0x0;
+	}
+}

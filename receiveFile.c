@@ -18,7 +18,7 @@ void handleError();
 /**
  * Initializes buffer table
  */
-void initBufferTable(char* bufferTable, int size, int * advWindowSize);
+void initBufferTable(char* bufferTable, int size);
 
 /**
  * Flushes buffer to file
@@ -58,10 +58,10 @@ int main (int argc, char* argv[]){
 		file = fopen(argv[1], "w");
 		
 		receiverBuffer = (char*) malloc(bufferSize * sizeof(char));
-		//bufferTable = (char*) malloc(bufferSize * sizeof(char));
+		bufferTable = (char*) malloc(bufferSize * sizeof(char));
 		receivedSegment = (Segment*) malloc(sizeof(Segment));
 		
-		//initBufferTable(bufferTable, sizeof(*bufferTable), &advWindowSize);
+		initBufferTable(bufferTable, bufferSize);
 		
 		// Init variables
 		lfr = 0;
@@ -113,18 +113,31 @@ int main (int argc, char* argv[]){
 						//Check if the segment is the requested next, if it does put it in buffer
 						printf("Data in frame\n");
 						
-						if(nextSeq == seqnum){
-							printf("data seqnum correct\n");
-							receiverBuffer[seqnum] = receivedSegment->data;
-							//bufferTable[seqnum] = 0x1;
+						if(bufferTable[seqnum % bufferSize] == 0x0){
+							receiverBuffer[seqnum % bufferSize] = receivedSegment->data;
+							bufferTable[seqnum] = 0x1;
 							advWindowSize -= 1;
-							
-							nextSeq = nextSeq + 1;
-							if(receivedSegment->seqnum % bufferSize != 0){ //Padding
-								lfr = lfr + 1;
+						
+							if(nextSeq == seqnum){
+								printf("data seqnum correct\n");
+								
+								nextSeq = nextSeq + 1;
+								if(receivedSegment->seqnum % bufferSize != 0){ //Padding
+									lfr = lfr + 1;
+								}
+								laf = lfr + windowSize;
+								laf = (laf >= bufferSize) ? bufferSize - 1 : laf;
 							}
-							laf = lfr + windowSize;
-							laf = (laf >= bufferSize) ? bufferSize - 1 : laf;
+							else{
+								printf("data out of order\n");
+							}
+						}
+						else{
+							i = seqnum;
+							while(bufferTable[i] == 0x1){ // Find out the next sequence needed
+								i++;
+							}
+							nextSeq = i;
 						}
 						
 						printf("Sending ACK nextseq = %d advwinsize = %d to %s:%d\n", nextSeq, advWindowSize, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
@@ -135,7 +148,7 @@ int main (int argc, char* argv[]){
 							lfr = 0;
 							laf = lfr + windowSize;
 							flushBuffer(file, receiverBuffer, bufferSize);
-							//initBufferTable(bufferTable, bufferSize, &advWindowSize);
+							initBufferTable(bufferTable, bufferSize);
 						}
 						
 						if(sendto(my_sock, &ack, sizeof(ack), 0, (struct sockaddr*) &socket_sender, sizeof(socket_sender)) == -1){
@@ -153,6 +166,7 @@ int main (int argc, char* argv[]){
 		} while(seqnum != -1);
 		initACK(&ack, -1, advWindowSize);
 		printf("Sending ACK nextseq = %d to %s:%d\n", -1, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
+		
 		if(sendto(my_sock, &ack, sizeof(ack), 0, (struct sockaddr*) &socket_sender, sizeof(socket_sender)) == -1){
 			printf("Error : Failed to send ACK for seqnum %d\n", nextSeq);
 		}
@@ -167,12 +181,11 @@ void handleError(){
 	exit(1);
 }
 
-void initBufferTable(char* bufferTable, int size, int * advWindowSize){
+void initBufferTable(char* bufferTable, int size){
 	int i;
 	for(i = 0; i<size; i++){
 		bufferTable[i] = 0x0;
 	}
-	*advWindowSize = size;
 }
 
 void flushBuffer(FILE* file, char* buffer, int size){

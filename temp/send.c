@@ -43,9 +43,13 @@ int main(void)
     }
      
     //keep listening for data
+	
+	uint32_t seqnum;
+	char data;
+	
     while(1)
     {
-        printf("Waiting for data...");
+        printf("Input data");
         fflush(stdout);
          
         //try to receive some data, this is a blocking call

@@ -291,7 +291,7 @@ void *sendFile() {
 				finish &= (statusTable[j] == 1);
 			}
 			finish &= (lar == fileSize);
-			usleep(1000);
+			usleep(20000);
 		}
 
 		free(senderBuffer);

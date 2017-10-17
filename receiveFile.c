@@ -106,20 +106,21 @@ int main (int argc, char* argv[]){
 				if(receivedSegment->checksum == countSegmentChecksum(*receivedSegment)){
 					seqnum = receivedSegment->seqnum;
 					
-					printf("Received Seqnum: %d, Data: %x\n",seqnum, receivedSegment->data);
+					printf("Received Seqnum: %d, Data: %c\n",seqnum, receivedSegment->data);
 					printf("LFR :%d ; LAF :%d\n",lfr, laf);
 					
 					if(seqnum % bufferSize >= lfr && seqnum % bufferSize <= laf){
 						//Check if the segment is the requested next, if it does put it in buffer
-						printf("Data in frame\n");
+						printf("Data in between frame\n");
 						
 						if(bufferTable[seqnum % bufferSize] == 0x0){
 							receiverBuffer[seqnum % bufferSize] = receivedSegment->data;
 							bufferTable[seqnum] = 0x1;
 							advWindowSize -= 1;
+							printf("Data %c is in buffer\n", receiverBuffer[seqnum % bufferSize]);
 						
 							if(nextSeq == seqnum){
-								printf("data seqnum correct\n");
+								printf("Data Seqnum in correct sequence\n");
 								
 								nextSeq = nextSeq + 1;
 								if(receivedSegment->seqnum % bufferSize != 0){ //Padding
@@ -129,7 +130,7 @@ int main (int argc, char* argv[]){
 								laf = (laf >= bufferSize) ? bufferSize - 1 : laf;
 							}
 							else{
-								printf("data out of order\n");
+								printf("Data Seqnum is out of order\n");
 							}
 						}
 						else{
@@ -140,7 +141,7 @@ int main (int argc, char* argv[]){
 							nextSeq = i;
 						}
 						
-						printf("Sending ACK nextseq = %d advwinsize = %d to %s:%d\n", nextSeq, advWindowSize, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
+						printf("Sending ACK nextseq = %d advwinsize = %d to %s:%d\n\n", nextSeq, advWindowSize, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
 						initACK(&ack, nextSeq, advWindowSize);
 						
 						if(advWindowSize == 0){
@@ -189,5 +190,11 @@ void initBufferTable(char* bufferTable, int size){
 }
 
 void flushBuffer(FILE* file, char* buffer, int size){
-	fwrite(buffer, 1, size, file);
+	int i = 0;
+	printf("\n\nBuffer full, write to file : \n");
+	for(i = 0; i<size; i++){
+		printf("%c",buffer[i]);
+		fprintf(file,"%c",buffer[i]);
+	}
+	printf("\n\n");
 }

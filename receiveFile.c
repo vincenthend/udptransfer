@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <errno.h>
+#include <string.h>
 #include "frame.h"
 
 int main (int argc, char* argv[]){
@@ -62,8 +64,12 @@ int main (int argc, char* argv[]){
 
 		// Binding socket address to port
 		if (bind(my_sock, (struct sockaddr*)&socket_my, sizeof(socket_my)) == -1){
-			printf("Error : Failed to bind socket\n");
-			exit(1);
+			int enable = 1;
+			if (setsockopt(my_sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+				printf("Socket error: %d, %s\n", errno, strerror(errno));
+				printf("Error : Failed to bind socket\n");
+				exit(1);
+			}
 		}
 		
 		/////////////////////////
@@ -74,7 +80,7 @@ int main (int argc, char* argv[]){
 		// Receive Data
 		while(1){
 			recv_len = recvfrom(my_sock, buf, 9, 0, (struct sockaddr *) &socket_sender, &slen);
-			fflush(stdout);
+			//fflush(stdout);
 			if (recv_len != -1) {
 				receivedSegment = (Segment*) buf;
 				//Process received data, check the checksum
@@ -103,8 +109,8 @@ int main (int argc, char* argv[]){
 					}
 				}
 				else{
-					printf("Received Misc Data : ");
-					printf("%x ",*receivedSegment);
+					printf("Received Misc Data: ");
+					//printf("%x ", *receivedSegment);
 					printf("\n");
 				}
 			}

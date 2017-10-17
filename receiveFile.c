@@ -10,8 +10,8 @@ int main (int argc, char* argv[]){
 	int windowSize, bufferSize, advWindowSize;
 	int my_port, my_ipadr, my_sock;
 	int recv_len;
-	char received[9];
 	char* receiverBuffer;
+	char buf[500];
 	Segment* receivedSegment;
 	ACK ack;
 	struct sockaddr_in socket_my, socket_sender;
@@ -36,13 +36,14 @@ int main (int argc, char* argv[]){
 		sscanf(argv[2], "%d", &windowSize); // Window size
 
 		receiverBuffer = (char*) malloc(bufferSize * sizeof(char));
-		//receivedSegment = (Segment*) malloc(sizeof(Segment));
+		receivedSegment = (Segment*) malloc(sizeof(Segment));
 
 		// Init variables
-		lfr = -1;
+		lfr = 0;
 		laf = lfr + windowSize;
 		nextSeq = 0;
-		seqnumtoack = -1;
+		seqnumtoack = 0;
+		advWindowSize = windowSize;
 		
 		/////////////////////
 		// Socket Creation //
@@ -70,29 +71,31 @@ int main (int argc, char* argv[]){
 		/////////////////////////
 		
 		printf("Receiving on port :%d\n",my_port);
-
 		// Receive Data
 		while(1){
-			recv_len = recvfrom(my_sock, received, sizeof(Segment), 0, (struct sockaddr *) &socket_sender, &slen);
+			recv_len = recvfrom(my_sock, buf, 9, 0, (struct sockaddr *) &socket_sender, &slen);
 			fflush(stdout);
-			receivedSegment = (Segment*) &received;
 			if (recv_len != -1) {
+				receivedSegment = (Segment*) buf;
 				//Process received data, check the checksum
 				if(receivedSegment->checksum == countSegmentChecksum(*receivedSegment)){
-					if(receivedSegment->seqnum > lfr && receivedSegment->seqnum <= laf){
+					printf("Received Seqnum: %d, Data: %c\n",receivedSegment->seqnum, receivedSegment->data);
+					printf("LFR :%d ; LAF :%d\n",lfr, laf);
+					if(receivedSegment->seqnum >= lfr && receivedSegment->seqnum <= laf){
 						//Check if the segment is the requested next, if it does put it in buffer
 						receiverBuffer[receivedSegment->seqnum] = receivedSegment->data;
-						printf("Received Seqnum: %d, Data: %c\n",receivedSegment->seqnum, receivedSegment->data);
+						printf("Data in frame\n");
 						if(nextSeq == receivedSegment->seqnum){
-							nextSeq = nextSeq + 1;
-							lfr = lfr + 1;
+							nextSeq = receivedSegment->seqnum + 1;
+							if(receivedSegment->seqnum != 0){ //Padding
+								lfr = lfr + 1;
+							}
 							laf = lfr + windowSize;
-							//Count 
 						}
-						
 						if (seqnumtoack < receivedSegment->seqnum){
 							seqnumtoack = receivedSegment->seqnum;
 						}
+						printf("Sending ACK nextseq = %d to %s on port %d\n", nextSeq, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
 						initACK(&ack, nextSeq, advWindowSize);
 						if(sendto(my_sock, &ack, sizeof(ack), 0, (struct sockaddr*) &socket_sender, sizeof(socket_sender)) == -1){
 							printf("Error : Failed to send ACK for seqnum %d\n", nextSeq);
@@ -101,9 +104,7 @@ int main (int argc, char* argv[]){
 				}
 				else{
 					printf("Received Misc Data : ");
-					for(i = 0; i<8; i++){
-						printf("%x\n",*receivedSegment);
-					}
+					printf("%x ",*receivedSegment);
 					printf("\n");
 				}
 			}

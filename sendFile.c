@@ -217,7 +217,7 @@ void* sendFile() {
 			for (int j = 0; j < windowSize; ++j) {
 				if (statusTable[j] == -1) {
 					sentSegment = windowBuffer[j];
-					sent_len = sendto(my_sock, sentSegment, sizeof(sentSegment), 0, (struct sockaddr*) &socket_destination,sizeof(socket_destination));
+					sent_len = sendto(my_sock, sentSegment, sizeof(Segment), 0, (struct sockaddr*) &socket_destination,sizeof(socket_destination));
 					if (sent_len == -1) {
 						handleError("Error: Failed to send data\n");
 					}
@@ -248,10 +248,10 @@ void* sendFile() {
 void* receiveAck() {
 	int recv_len;
 	ACK* ack;
-
+	ack = (ACK*) malloc(sizeof(ACK));
 	while (lar == -1 || lar < fileSize - 1) {
 		// Receive ACK
-		recv_len = recvfrom(my_sock, (char*) ack, 7, 0, (struct sockaddr*) &socket_destination, &slen);
+		recv_len = recvfrom(my_sock, ack, sizeof(ACK), 0, NULL, NULL);
 		if (recv_len != -1) {
 			// Check if ACK is in order
 			statusTable[(ack->nextseq - 1) % windowSize] = 1;

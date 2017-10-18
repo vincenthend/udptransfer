@@ -308,7 +308,7 @@ void *sendFile() {
 				if (sent_len == -1) {
 					handleError("Error: Failed to send data\n");
 				}
-				// printf("Data %d sent: %c\n", sentSegment->seqnum, sentSegment->data);
+				 printf("Data %d sent: %c\n", sentSegment->seqnum, sentSegment->data);
 				// if (sentSegment->seqnum == -1) sleep(3);
 				statusTable[j] = 0;
 				timeoutTable[j] = TIMEOUT;
@@ -374,7 +374,7 @@ void *receiveAck() {
 		recv_len = recvfrom(my_sock, ack, sizeof(ACK), 0, NULL, NULL);
 		if (recv_len != -1) {
 			if (countACKChecksum(*ack) == ack->checksum) {
-				// printf("Received ACK %d\n", ack->nextseq - 1);
+				printf("Received ACK %d\n", ack->nextseq - 1);
 				if (status < 2) {
 					status = 2;
 					statusTable[0] = 1;
@@ -405,7 +405,7 @@ void *receiveAck() {
 				}
 
 				// Check if ACK is in order
-				// printf("ack->nextseq = %d, lar = %d lfs = %d, filesize = %jd => %d\n", ack->nextseq, lar, lfs, fileSize, (ack->nextseq == EOF_SEQNUM && lar == fileSize - 1));
+				 printf("ack->nextseq = %d, lar = %d lfs = %d, filesize = %jd => %d\n", ack->nextseq, lar, lfs, fileSize, (ack->nextseq == EOF_SEQNUM && lar == fileSize - 1));
 				// if ((ack->nextseq - 1 == lar + 1) || (ack->nextseq == EOF_SEQNUM && (lar == fileSize - 1 || fileSize == 0))) {
 				// 	int nextLar = lar + 1;
 				// 	if (ack->nextseq != EOF_SEQNUM) {

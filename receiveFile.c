@@ -127,10 +127,12 @@ int main (int argc, char* argv[]){
 							if(nextSeq == seqnum){
 								printf( "Data Seqnum in correct sequence\n");
 								
-								nextSeq = nextSeq + 1;
-								if(receivedSegment->seqnum % bufferSize != 0){ //Padding
-									lfr = lfr + 1;
+								i = lfr;
+								while(bufferTable[i] == 0x1){ // Find out the next sequence needed
+									i++;
 								}
+								lfr = i-1;
+								nextSeq = lfr+1;
 								laf = lfr + windowSize;
 								laf = (laf >= bufferSize) ? bufferSize - 1 : laf;
 							}
@@ -141,10 +143,10 @@ int main (int argc, char* argv[]){
 						}
 						else{
 							i = lfr;
-							initACK(&ack, seqnum+1, advWindowSize);
 							while(bufferTable[i] == 0x1){ // Find out the next sequence needed
 								i++;
 							}
+							initACK(&ack, i, advWindowSize);
 							nextSeq = i;
 						}
 						

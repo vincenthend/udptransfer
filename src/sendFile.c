@@ -251,6 +251,7 @@ void *sendFile() {
 		// Convert data to segment
 		// Segment *sentSegment;
 		int currWindowSize = lfs - lar + (status < 2);
+		printf("currWindowSize: %d\n", currWindowSize);
 		if ((currWindowSize <= windowSize) && (i < bufferSize) && (seqnum < fileSize) && advanced) {
 			// sentSegment = (Segment*) malloc(sizeof(Segment));
 
@@ -332,16 +333,16 @@ void *sendFile() {
 		// finish = eofReceived;
 
 		// Debug
-		// printf("Status table:\t| ");
-		// for (int j = 0; j < windowSize; ++j) {
-		// 	int seqnum = -1;
-		// 	if (windowBuffer[j] != NULL) {
-		// 		seqnum = windowBuffer[j]->seqnum;
-		// 	}
-		// 	printf("%d: %d\t| ", seqnum, statusTable[j]);
-		// }
-		// printf("\n");
-		usleep(100);
+		printf("Status table:\t| ");
+		for (int j = 0; j < windowSize; ++j) {
+			int seqnum = -1;
+			if (windowBuffer[j] != NULL) {
+				seqnum = windowBuffer[j]->seqnum;
+			}
+			printf("%d: %d\t| ", seqnum, statusTable[j]);
+		}
+		printf("\n");
+		usleep(100000);
 	}
 
 	// pthread_join(tidReceiveAck, NULL);
@@ -393,7 +394,7 @@ void *receiveAck() {
 
 				// Process EOF ACK
 				if (ack->nextseq == EOF_SEQNUM && (lar == fileSize - 1 || fileSize == 0)) {
-					// printf("EOF ACK\n");
+					printf("EOF ACK\n");
 					exit(0);
 					int nextLar = lar + 1;
 					for (int i = nextLar; i <= fileSize; ++i) {

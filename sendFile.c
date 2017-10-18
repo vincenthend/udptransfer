@@ -14,7 +14,7 @@
 #include "frame.h"
 
 #define PORT 8000
-#define TIMEOUT 3000 // milliseconds
+#define TIMEOUT 300 // milliseconds
 #define EOF_SEQNUM -1
 
 
@@ -282,7 +282,12 @@ void *sendFile() {
 		for (int j = 0; j < limit; ++j) {
 			finish &= (statusTable[j] == 1);
 		}
-		if (lar == fileSize - 1 && finish) {
+		finish &= (lar == fileSize - 1);
+		if (fileSize == 0) {
+			finish = 1;
+			status = 2;
+		}
+		if (finish) {
 			// Create segment
 			sentSegment = (Segment*) malloc(sizeof(Segment));
 			initSegment(sentSegment, EOF_SEQNUM, 0x00);
@@ -352,6 +357,7 @@ void *sendFile() {
 	// pthread_join(tidTimeout, NULL);
 	// printf("Timeout thread terminated\n");
 	printf("Terminating sender thread\n");
+	exit(0);
 	pthread_exit(NULL);
 }
 
@@ -374,7 +380,7 @@ void *receiveAck() {
 
 			// Check if ACK is in order
 			printf("ack->nextseq = %d, lar = %d, filesize = %jd => %d\n", ack->nextseq, lar, fileSize, (ack->nextseq == EOF_SEQNUM && lar == fileSize - 1));
-			if ((ack->nextseq - 1 == lar + 1) || (ack->nextseq == EOF_SEQNUM && lar == fileSize - 1)) {
+			if ((ack->nextseq - 1 == lar + 1) || (ack->nextseq == EOF_SEQNUM && (lar == fileSize - 1 || fileSize == 0))) {
 				if (ack->nextseq != EOF_SEQNUM) {
 					// Received ACK = LAR + 1
 					for (int i = lar + 1; i < ack->nextseq; ++i) {
@@ -429,6 +435,7 @@ void *receiveAck() {
 		free(ack);
 	}
 	printf("Terminating receiver thread\n");
+	exit(0);
 	pthread_exit(NULL);
 }
 

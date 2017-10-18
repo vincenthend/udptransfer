@@ -373,85 +373,87 @@ void *receiveAck() {
 		// Receive ACK
 		recv_len = recvfrom(my_sock, ack, sizeof(ACK), 0, NULL, NULL);
 		if (recv_len != -1) {
-			printf("Received ACK %d\n", ack->nextseq - 1);
-			if (status < 2) {
-				status = 2;
-				statusTable[0] = 1;
-			}
+			if (countACKChecksum(*ack) == ack->checksum) {
+				printf("Received ACK %d\n", ack->nextseq - 1);
+				if (status < 2) {
+					status = 2;
+					statusTable[0] = 1;
+				}
 
-			// Process ACK
-			if (ack->nextseq > lar) {
-				int nextLar = lar + 1;
-				if (ack->nextseq != EOF_SEQNUM) {
-					for (int i = nextLar; i < ack->nextseq; ++i) {
+				// Process ACK
+				if (ack->nextseq > lar) {
+					int nextLar = lar + 1;
+					if (ack->nextseq != EOF_SEQNUM) {
+						for (int i = nextLar; i < ack->nextseq; ++i) {
+							statusTable[i % windowSize] = 1;
+							lar++;
+						}
+					}
+				}
+
+				// Process EOF ACK
+				if (ack->nextseq == EOF_SEQNUM && (lar == fileSize - 1 || fileSize == 0)) {
+					printf("EOF ACK\n");
+					int nextLar = lar + 1;
+					for (int i = nextLar; i <= fileSize; ++i) {
 						statusTable[i % windowSize] = 1;
 						lar++;
 					}
+					status = 3;
+					eofReceived = 1;
 				}
+
+				// Check if ACK is in order
+				printf("ack->nextseq = %d, lar = %d, filesize = %jd => %d\n", ack->nextseq, lar, fileSize, (ack->nextseq == EOF_SEQNUM && lar == fileSize - 1));
+				// if ((ack->nextseq - 1 == lar + 1) || (ack->nextseq == EOF_SEQNUM && (lar == fileSize - 1 || fileSize == 0))) {
+				// 	int nextLar = lar + 1;
+				// 	if (ack->nextseq != EOF_SEQNUM) {
+				// 		// Received ACK = LAR + 1
+				// 		for (int i = nextLar; i < ack->nextseq; ++i) {
+				// 			statusTable[i % windowSize] = 1;
+				// 			lar++;
+				// 		}
+				// 	} else {
+				// 		// Special case: received ACK == EOF
+				// 		printf("EOF ACK\n");
+				// 		for (int i = nextLar; i < fileSize; ++i) {
+				// 			statusTable[i % windowSize] = 1;
+				// 			lar++;
+				// 		}
+				// 		statusTable[fileSize % windowSize] = 1;
+				// 		lar = fileSize;
+				// 		status = 3;
+				// 		eofReceived = 1;
+				// 	}
+
+				// 	// if (lar < fileSize) {
+				// 	// 	int tempLar = lar % windowSize;
+				// 	// 	char advance = 1;
+				// 	// 	for (int i = (tempLar + 1) % windowSize; i != tempLar && advance; i = (i + 1) % windowSize) {
+				// 	// 		if (windowBuffer[i] != NULL) {
+				// 	// 			advance = statusTable[i] == 1 && lar < lfs && windowBuffer[i]->seqnum > lar;
+				// 	// 			if (advance) {
+				// 	// 				lar++;
+				// 	// 			}
+				// 	// 		}
+				// 	// 	}
+				// 	// }
+				// }
+
+				// // Debug
+				// printf("Status table:\t| ");
+				// for (int j = 0; j < windowSize; ++j) {
+				// 	int seqnum = -1;
+				// 	if (windowBuffer[j] != NULL) {
+				// 		seqnum = windowBuffer[j]->seqnum;
+				// 	}
+				// 	printf("%d: %d\t| ", seqnum, statusTable[j]);
+				// }
+				// printf("\n");
+
+				// free(ack);
+				// ack = (ACK*) malloc(sizeof(ACK));
 			}
-
-			// Process EOF ACK
-			if (ack->nextseq == EOF_SEQNUM && (lar == fileSize - 1 || fileSize == 0)) {
-				printf("EOF ACK\n");
-				int nextLar = lar + 1;
-				for (int i = nextLar; i <= fileSize; ++i) {
-					statusTable[i % windowSize] = 1;
-					lar++;
-				}
-				status = 3;
-				eofReceived = 1;
-			}
-
-			// Check if ACK is in order
-			printf("ack->nextseq = %d, lar = %d, filesize = %jd => %d\n", ack->nextseq, lar, fileSize, (ack->nextseq == EOF_SEQNUM && lar == fileSize - 1));
-			// if ((ack->nextseq - 1 == lar + 1) || (ack->nextseq == EOF_SEQNUM && (lar == fileSize - 1 || fileSize == 0))) {
-			// 	int nextLar = lar + 1;
-			// 	if (ack->nextseq != EOF_SEQNUM) {
-			// 		// Received ACK = LAR + 1
-			// 		for (int i = nextLar; i < ack->nextseq; ++i) {
-			// 			statusTable[i % windowSize] = 1;
-			// 			lar++;
-			// 		}
-			// 	} else {
-			// 		// Special case: received ACK == EOF
-			// 		printf("EOF ACK\n");
-			// 		for (int i = nextLar; i < fileSize; ++i) {
-			// 			statusTable[i % windowSize] = 1;
-			// 			lar++;
-			// 		}
-			// 		statusTable[fileSize % windowSize] = 1;
-			// 		lar = fileSize;
-			// 		status = 3;
-			// 		eofReceived = 1;
-			// 	}
-
-			// 	// if (lar < fileSize) {
-			// 	// 	int tempLar = lar % windowSize;
-			// 	// 	char advance = 1;
-			// 	// 	for (int i = (tempLar + 1) % windowSize; i != tempLar && advance; i = (i + 1) % windowSize) {
-			// 	// 		if (windowBuffer[i] != NULL) {
-			// 	// 			advance = statusTable[i] == 1 && lar < lfs && windowBuffer[i]->seqnum > lar;
-			// 	// 			if (advance) {
-			// 	// 				lar++;
-			// 	// 			}
-			// 	// 		}
-			// 	// 	}
-			// 	// }
-			// }
-
-			// // Debug
-			// printf("Status table:\t| ");
-			// for (int j = 0; j < windowSize; ++j) {
-			// 	int seqnum = -1;
-			// 	if (windowBuffer[j] != NULL) {
-			// 		seqnum = windowBuffer[j]->seqnum;
-			// 	}
-			// 	printf("%d: %d\t| ", seqnum, statusTable[j]);
-			// }
-			// printf("\n");
-
-			// free(ack);
-			// ack = (ACK*) malloc(sizeof(ACK));
 		}
 	}
 

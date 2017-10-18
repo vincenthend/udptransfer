@@ -137,7 +137,7 @@ int main (int argc, char* argv[]){
 						}
 						else{
 							i = lfr;
-							initACK(&ack, i+1, advWindowSize);
+							initACK(&ack, seqnum+1, advWindowSize);
 							while(bufferTable[i] == 0x1){ // Find out the next sequence needed
 								i++;
 							}
@@ -175,6 +175,7 @@ int main (int argc, char* argv[]){
 		}
 		flushBuffer(argv[1], receiverBuffer, bufferSize-advWindowSize);
 	}
+	fclose(stdout);
 	return 0;
 }
 

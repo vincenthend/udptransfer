@@ -287,7 +287,7 @@ void *sendFile() {
 		// 	finish = 1;
 		// 	status = 2;
 		// }
-		if (lar == fileSize - 1 || fileSize == 0) {
+		if ((lar == fileSize - 1 && status == 2) || fileSize == 0) {
 			status = 2;
 
 			// Create segment

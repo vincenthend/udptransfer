@@ -36,8 +36,8 @@ int main (int argc, char* argv[]){
 	Segment* receivedSegment;
 	ACK ack;
 	struct sockaddr_in socket_my, socket_sender;
-	file = fopen("recvlog.txt","w");
-	freopen(argv[1],"w",stdout);
+	
+	//File* file2= fopen(argv[1],"w",stdout);
 
 	//Runtime var
 	uint32_t nextSeq, lfr, laf, seqnum;
@@ -45,7 +45,7 @@ int main (int argc, char* argv[]){
 	slen = sizeof(socket_sender);
 	
 	if(argc != 5){
-		fprintf(file, "Usage : ./recvfile <filename> <windowsize> <buffersize> <port>\n");
+		printf( "Usage : ./recvfile <filename> <windowsize> <buffersize> <port>\n");
 		exit(1);
 	}
 	else{
@@ -63,6 +63,10 @@ int main (int argc, char* argv[]){
 		receivedSegment = (Segment*) malloc(sizeof(Segment));
 		
 		initBufferTable(bufferTable, bufferSize);
+		
+		
+		file = fopen(argv[1],"wb");
+		setvbuf(file, NULL, _IONBF, 4096);
 		
 		// Init variables
 		lfr = 0;
@@ -96,7 +100,7 @@ int main (int argc, char* argv[]){
 		//  Segment Receiving  //
 		/////////////////////////
 		
-		fprintf(file, "Receiving on port :%d\n",my_port);
+		printf( "Receiving on port :%d\n",my_port);
 		// Receive Data
 		do{
 			recv_len = recvfrom(my_sock, receivedSegment, 9, 0, (struct sockaddr *) &socket_sender, &slen);
@@ -107,21 +111,21 @@ int main (int argc, char* argv[]){
 				if(receivedSegment->checksum == countSegmentChecksum(*receivedSegment)){
 					seqnum = receivedSegment->seqnum;
 					
-					fprintf(file, "Received Seqnum: %d, Data: %c\n",seqnum, receivedSegment->data);
-					fprintf(file, "LFR :%d ; LAF :%d\n",lfr, laf);
+					printf( "Received Seqnum: %d, Data: %c\n",seqnum, receivedSegment->data);
+					printf( "LFR :%d ; LAF :%d\n",lfr, laf);
 					
 					if(seqnum % bufferSize >= lfr && seqnum % bufferSize <= laf && seqnum != -1){
 						//Check if the segment is the requested next, if it does put it in buffer
-						fprintf(file, "Data in between frame\n");
+						printf( "Data in between frame\n");
 						
 						if(bufferTable[seqnum % bufferSize] == 0x0){
 							receiverBuffer[seqnum % bufferSize] = receivedSegment->data;
 							bufferTable[seqnum] = 0x1;
 							advWindowSize -= 1;
-							fprintf(file, "Data %c is in buffer\n", receiverBuffer[seqnum % bufferSize]);
+							printf( "Data %c is in buffer\n", receiverBuffer[seqnum % bufferSize]);
 						
 							if(nextSeq == seqnum){
-								fprintf(file, "Data Seqnum in correct sequence\n");
+								printf( "Data Seqnum in correct sequence\n");
 								
 								nextSeq = nextSeq + 1;
 								if(receivedSegment->seqnum % bufferSize != 0){ //Padding
@@ -131,7 +135,7 @@ int main (int argc, char* argv[]){
 								laf = (laf >= bufferSize) ? bufferSize - 1 : laf;
 							}
 							else{
-								fprintf(file, "Data Seqnum is out of order\n");
+								printf( "Data Seqnum is out of order\n");
 							}
 							initACK(&ack, nextSeq, advWindowSize);
 						}
@@ -144,7 +148,7 @@ int main (int argc, char* argv[]){
 							nextSeq = i;
 						}
 						
-						fprintf(file, "Sending ACK nextseq = %d advwinsize = %d to %s:%d\n\n", nextSeq, advWindowSize, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
+						printf( "Sending ACK nextseq = %d advwinsize = %d to %s:%d\n\n", nextSeq, advWindowSize, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
 						
 						if(advWindowSize == 0){
 							advWindowSize = bufferSize;
@@ -155,12 +159,12 @@ int main (int argc, char* argv[]){
 						}
 						
 						if(sendto(my_sock, &ack, sizeof(ack), 0, (struct sockaddr*) &socket_sender, sizeof(socket_sender)) == -1){
-							fprintf(file, "Error : Failed to send ACK for seqnum %d\n", nextSeq);
+							printf( "Error : Failed to send ACK for seqnum %d\n", nextSeq);
 						}
 					}
 				}
 				else{
-					fprintf(file, "Received Misc Data: %x\n ", *receivedSegment);
+					printf( "Received Misc Data: %x\n ", *receivedSegment);
 				}
 			}
 			else{
@@ -168,10 +172,10 @@ int main (int argc, char* argv[]){
 			}
 		} while(seqnum != -1);
 		initACK(&ack, -1, advWindowSize);
-		fprintf(file, "Sending ACK nextseq = %d to %s:%d\n", -1, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
+		printf( "Sending ACK nextseq = %d to %s:%d\n", -1, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
 		
 		if(sendto(my_sock, &ack, sizeof(ack), 0, (struct sockaddr*) &socket_sender, sizeof(socket_sender)) == -1){
-			fprintf(file, "Error : Failed to send ACK for seqnum %d\n", nextSeq);
+			printf( "Error : Failed to send ACK for seqnum %d\n", nextSeq);
 		}
 		flushBuffer(argv[1], receiverBuffer, bufferSize-advWindowSize);
 	}
@@ -180,7 +184,7 @@ int main (int argc, char* argv[]){
 }
 
 void handleError(){
-	fprintf(file, "Error : %s\n", strerror(errno));
+	printf( "Error : %s\n", strerror(errno));
 	exit(1);
 }
 
@@ -193,9 +197,9 @@ void initBufferTable(char* bufferTable, int size){
 
 void flushBuffer(char* filename, char* buffer, int size){
 	int i = 0;
-	fprintf(file, "\n\nBuffer full, write to file : \n");
+	printf( "\n\nBuffer full, write to file : \n");
 	for(i = 0; i<size; i++){
-		printf("%c",buffer[i]);
+		fprintf(file, "%c",buffer[i]);
 	}
-	fprintf(file, "\n\n");
+	printf( "\n\n");
 }

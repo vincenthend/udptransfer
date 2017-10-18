@@ -309,7 +309,7 @@ void *sendFile() {
 					handleError("Error: Failed to send data\n");
 				}
 				printf("Data %d sent: %c\n", sentSegment->seqnum, sentSegment->data);
-				if (sentSegment->seqnum == -1) sleep(3);
+				//if (sentSegment->seqnum == -1) sleep(3);
 				statusTable[j] = 0;
 				timeoutTable[j] = TIMEOUT;
 			}

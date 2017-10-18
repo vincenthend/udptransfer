@@ -1,4 +1,5 @@
 #define _BSD_SOURCE
+#define _GNU_SOURCE
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -106,9 +107,12 @@ int main(int argc, char *argv[]) {
 	// Read arguments
 	fileName = argv[1];
 	sscanf(argv[2], "%d", &windowSize);
+	// sscanf("12", "%d", &windowSize);
 	sscanf(argv[3], "%d", &bufferSize);
 	dest_ipadr = inet_addr(argv[4]);
 	sscanf(argv[5], "%d", &dest_port);
+
+	printf("Window size: %d | Buffer size: %d\n", windowSize, bufferSize);
 
 	// Open file
 	fptr = fopen(fileName, "rb");
@@ -234,6 +238,7 @@ off_t readFile(off_t dataPtr) {
 
 void *sendFile() {
 	printf("Sender thread started\n");
+	pthread_setname_np(pthread_self(), "sendThread");
 
 	int i = 0;
 	int sent_len;
@@ -330,7 +335,7 @@ void *sendFile() {
 		// 	printf("%d: %d\t| ", seqnum, statusTable[j]);
 		// }
 		// printf("\n");
-		// usleep(1000);
+		usleep(1000);
 	}
 
 	pthread_join(tidReceiveAck, NULL);
@@ -352,6 +357,7 @@ void *sendFile() {
 
 void *receiveAck() {
 	printf("Receiver thread started\n");
+	pthread_setname_np(pthread_self(), "receiverThread");
 
 	int recv_len;
 	ACK *ack;
@@ -428,6 +434,7 @@ void *receiveAck() {
 
 void *timeout() {
 	printf("Timeout thread started\n");
+	pthread_setname_np(pthread_self(), "timeoutThread");
 
 	while (status != 3) {
 		usleep(1000);

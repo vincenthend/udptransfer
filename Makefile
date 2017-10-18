@@ -1,7 +1,7 @@
 all : sendfile recvfile
 
-sendfile: sendFile.c frame.c
-	gcc sendFile.c frame.c -o sendfile -lpthread -std=c99
+sendfile: ./src/sendFile.c ./src/frame.c
+	gcc ./src/sendFile.c ./src/frame.c -o sendfile -lpthread -std=c99
 	
-recvfile: receiveFile.c frame.c
-	gcc receiveFile.c frame.c -o recvfile
+recvfile: ./src/receiveFile.c ./src/frame.c
+	gcc ./src/receiveFile.c ./src/frame.c -o recvfile

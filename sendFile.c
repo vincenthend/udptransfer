@@ -180,10 +180,10 @@ int main(int argc, char *argv[]) {
 
 	pthread_join(tidSend, NULL);
 	printf("Sender thread terminated\n");
-	pthread_join(tidReceiveAck, NULL);
-	printf("Receiver thread terminated\n");
-	pthread_join(tidTimeout, NULL);
-	printf("Timeout thread terminated\n");
+	// pthread_join(tidReceiveAck, NULL);
+	// printf("Receiver thread terminated\n");
+	// pthread_join(tidTimeout, NULL);
+	// printf("Timeout thread terminated\n");
 
 	// Closing
 	printf("Closing files, freeing buffers\n");
@@ -273,7 +273,8 @@ void *sendFile() {
 
 		// Send EOF if no more data to send
 		finish = 1;
-		for (int j = 0; j < windowSize; ++j) {
+		off_t limit = (fileSize < windowSize) ? fileSize : windowSize;
+		for (int j = 0; j < limit; ++j) {
 			finish &= (statusTable[j] == 1);
 		}
 		if (lar == fileSize - 1 && finish) {
@@ -282,7 +283,7 @@ void *sendFile() {
 			initSegment(sentSegment, EOF_SEQNUM, 0x00);
 
 			// Fill sender buffer
-			windowBufferPtr = (windowBufferPtr + 1) % windowSize;
+			//windowBufferPtr = (windowBufferPtr + 1) % windowSize;
 			windowBuffer[windowBufferPtr] = sentSegment;
 			statusTable[windowBufferPtr] = -1;
 			seqnum = EOF_SEQNUM;
@@ -318,8 +319,22 @@ void *sendFile() {
 
 		// Finish condition: all data sent successfully
 		finish = eofReceived;
-		usleep(1000);
+
+		// Debug
+		// printf("Status table:\t| ");
+		// for (int j = 0; j < windowSize; ++j) {
+		// 	int seqnum = -1;
+		// 	if (windowBuffer[j] != NULL) {
+		// 		seqnum = windowBuffer[j]->seqnum;
+		// 	}
+		// 	printf("%d: %d\t| ", seqnum, statusTable[j]);
+		// }
+		// printf("\n");
+		// usleep(1000);
 	}
+
+	pthread_join(tidReceiveAck, NULL);
+	printf("Receiver thread terminated\n");
 
 	// Free segments
 	for (int i = 0; i < windowSize; ++i) {
@@ -328,7 +343,10 @@ void *sendFile() {
 	}
 	free(windowBuffer);
 
-	printf("Sender thread terminated\n");
+
+	// pthread_join(tidTimeout, NULL);
+	// printf("Timeout thread terminated\n");
+	printf("Terminating sender thread\n");
 	pthread_exit(NULL);
 }
 
@@ -345,6 +363,7 @@ void *receiveAck() {
 			printf("Received ACK %d\n", ack->nextseq - 1);
 			if (status < 2) {
 				status = 2;
+				statusTable[0] = 1;
 			}
 
 			// Check if ACK is in order
@@ -381,20 +400,29 @@ void *receiveAck() {
 				}
 			}
 
-			// Debug
-			printf("Status table:\t| ");
-			for (int j = 0; j < windowSize; ++j) {
-				int seqnum = -1;
-				if (windowBuffer[j] != NULL) {
-					seqnum = windowBuffer[j]->seqnum;
-				}
-				printf("%d: %d\t| ", seqnum, statusTable[j]);
-			}
-			printf("\n");
+			// // Debug
+			// printf("Status table:\t| ");
+			// for (int j = 0; j < windowSize; ++j) {
+			// 	int seqnum = -1;
+			// 	if (windowBuffer[j] != NULL) {
+			// 		seqnum = windowBuffer[j]->seqnum;
+			// 	}
+			// 	printf("%d: %d\t| ", seqnum, statusTable[j]);
+			// }
+			// printf("\n");
+
+			free(ack);
+			ack = (ACK*) malloc(sizeof(ACK));
 		}
 	}
 
-	printf("Receiver thread terminated\n");
+	pthread_join(tidTimeout, NULL);
+	printf("Timeout thread terminated\n");
+
+	if (ack != NULL) {
+		free(ack);
+	}
+	printf("Terminating receiver thread\n");
 	pthread_exit(NULL);
 }
 
@@ -413,7 +441,7 @@ void *timeout() {
 		}
 	}
 
-	printf("Timeout thread terminated\n");
+	printf("Terminating timeout thread\n");
 	pthread_exit(NULL);
 }
 

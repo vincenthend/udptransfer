@@ -108,7 +108,7 @@ int main (int argc, char* argv[]){
 					//printf("Received Seqnum: %d, Data: %c\n",seqnum, receivedSegment->data);
 					//printf("LFR :%d ; LAF :%d\n",lfr, laf);
 					
-					if(seqnum % bufferSize >= lfr && seqnum % bufferSize <= laf){
+					if(seqnum % bufferSize >= lfr && seqnum % bufferSize <= laf && seqnum != -1){
 						//Check if the segment is the requested next, if it does put it in buffer
 						//printf("Data in between frame\n");
 						

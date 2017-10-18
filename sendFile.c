@@ -14,7 +14,7 @@
 #include "frame.h"
 
 #define PORT 8000
-#define TIMEOUT 300 // milliseconds
+#define TIMEOUT 100 // milliseconds
 #define EOF_SEQNUM -1
 
 
@@ -106,13 +106,11 @@ int main(int argc, char *argv[]) {
 
 	// Read arguments
 	fileName = argv[1];
-	sscanf(argv[2], "%d", &windowSize);
-	// sscanf("12", "%d", &windowSize);
+	// sscanf(argv[2], "%d", &windowSize);
+	sscanf("12", "%d", &windowSize);
 	sscanf(argv[3], "%d", &bufferSize);
 	dest_ipadr = inet_addr(argv[4]);
 	sscanf(argv[5], "%d", &dest_port);
-
-	printf("Window size: %d | Buffer size: %d\n", windowSize, bufferSize);
 
 	// Open file
 	fptr = fopen(fileName, "rb");
@@ -129,6 +127,7 @@ int main(int argc, char *argv[]) {
 	eofReceived = 0;
 
 	// Set buffer
+	senderBuffer = (char*) malloc(bufferSize * sizeof(char));
 	windowBuffer = (Segment**) malloc(windowSize * sizeof(Segment*));
 	statusTable = (char*) malloc(windowSize * sizeof(char));
 	timeoutTable = (uint32_t*) malloc(windowSize * sizeof(char));
@@ -175,7 +174,7 @@ int main(int argc, char *argv[]) {
 	socket_destination.sin_addr.s_addr = dest_ipadr;
 	slen = sizeof(socket_destination);
 
-	printf("Sending to %s\n	", inet_ntoa(socket_destination.sin_addr));
+	// printf("Sending to %s\n	", inet_ntoa(socket_destination.sin_addr));
 
 	// Send data
 	pthread_create(&tidSend, NULL, sendFile, NULL);
@@ -183,14 +182,14 @@ int main(int argc, char *argv[]) {
 	pthread_create(&tidTimeout, NULL, timeout, NULL);
 
 	pthread_join(tidSend, NULL);
-	printf("Sender thread terminated\n");
+	// printf("Sender thread terminated\n");
 	pthread_join(tidReceiveAck, NULL);
-	printf("Receiver thread terminated\n");
+	// printf("Receiver thread terminated\n");
 	pthread_join(tidTimeout, NULL);
-	printf("Timeout thread terminated\n");
+	// printf("Timeout thread terminated\n");
 
 	// Closing
-	printf("Closing files, freeing buffers\n");
+	// printf("Closing files, freeing buffers\n");
 	// free(senderBuffer);
 	// free(statusTable);
 	fclose(fptr);
@@ -224,12 +223,12 @@ off_t readFile(off_t dataPtr) {
 		}
 
 		// Set buffer
-		senderBuffer = (char*) malloc(bufferSize * sizeof(char));
+		// senderBuffer = (char*) malloc(bufferSize * sizeof(char));
 		dataPtr += bufferSize;
 
 		// Read file
 		fread(senderBuffer, bufferSize, 1, fptr);
-		printf("Flushed buffer\n\n");
+		// printf("Flushed buffer\n\n");
 
 	}
 
@@ -237,8 +236,8 @@ off_t readFile(off_t dataPtr) {
 }
 
 void *sendFile() {
-	printf("Sender thread started\n");
-	pthread_setname_np(pthread_self(), "sendThread");
+	// printf("Sender thread started\n");
+	// pthread_setname_np(pthread_self(), "sendThread");
 
 	int i = 0;
 	int sent_len;
@@ -246,22 +245,23 @@ void *sendFile() {
 	char advanced = 1;
 	off_t dataPtr = readFile(0);
 	windowBufferPtr = 0;
+	Segment* sentSegment = (Segment*) malloc(sizeof(Segment));
 
 	while (!eofReceived) {
 		// Convert data to segment
-		Segment *sentSegment;
+		// Segment *sentSegment;
 		int currWindowSize = lfs - lar + (status < 2);
 		if ((currWindowSize <= windowSize) && (i < bufferSize) && (seqnum < fileSize) && advanced) {
-			sentSegment = (Segment*) malloc(sizeof(Segment));
+			// sentSegment = (Segment*) malloc(sizeof(Segment));
 
 			// Fill segment
 			char data = (i == -1) ? lastBuffer : senderBuffer[i];
 			initSegment(sentSegment, seqnum, data);
 
 			// Fill sender buffer
-			if (windowBuffer[windowBufferPtr] != NULL) {
-				free(windowBuffer[windowBufferPtr]);
-			}
+			// if (windowBuffer[windowBufferPtr] != NULL) {
+			// 	free(windowBuffer[windowBufferPtr]);
+			// }
 			windowBuffer[windowBufferPtr] = sentSegment;
 			statusTable[windowBufferPtr] = -1;
 
@@ -308,8 +308,8 @@ void *sendFile() {
 				if (sent_len == -1) {
 					handleError("Error: Failed to send data\n");
 				}
-				printf("Data %d sent: %c\n", sentSegment->seqnum, sentSegment->data);
-				//if (sentSegment->seqnum == -1) sleep(3);
+				// printf("Data %d sent: %c\n", sentSegment->seqnum, sentSegment->data);
+				// if (sentSegment->seqnum == -1) sleep(3);
 				statusTable[j] = 0;
 				timeoutTable[j] = TIMEOUT;
 			}
@@ -357,14 +357,14 @@ void *sendFile() {
 
 	// pthread_join(tidTimeout, NULL);
 	// printf("Timeout thread terminated\n");
-	printf("Terminating sender thread\n");
+	// printf("Terminating sender thread\n");
 	exit(0);
 	pthread_exit(NULL);
 }
 
 void *receiveAck() {
-	printf("Receiver thread started\n");
-	pthread_setname_np(pthread_self(), "receiverThread");
+	// printf("Receiver thread started\n");
+	// pthread_setname_np(pthread_self(), "receiverThread");
 
 	int recv_len;
 	ACK *ack;
@@ -374,7 +374,7 @@ void *receiveAck() {
 		recv_len = recvfrom(my_sock, ack, sizeof(ACK), 0, NULL, NULL);
 		if (recv_len != -1) {
 			if (countACKChecksum(*ack) == ack->checksum) {
-				printf("Received ACK %d\n", ack->nextseq - 1);
+				// printf("Received ACK %d\n", ack->nextseq - 1);
 				if (status < 2) {
 					status = 2;
 					statusTable[0] = 1;
@@ -393,7 +393,8 @@ void *receiveAck() {
 
 				// Process EOF ACK
 				if (ack->nextseq == EOF_SEQNUM && (lar == fileSize - 1 || fileSize == 0)) {
-					printf("EOF ACK\n");
+					// printf("EOF ACK\n");
+					exit(0);
 					int nextLar = lar + 1;
 					for (int i = nextLar; i <= fileSize; ++i) {
 						statusTable[i % windowSize] = 1;
@@ -404,7 +405,7 @@ void *receiveAck() {
 				}
 
 				// Check if ACK is in order
-				printf("ack->nextseq = %d, lar = %d, filesize = %jd => %d\n", ack->nextseq, lar, fileSize, (ack->nextseq == EOF_SEQNUM && lar == fileSize - 1));
+				// printf("ack->nextseq = %d, lar = %d lfs = %d, filesize = %jd => %d\n", ack->nextseq, lar, lfs, fileSize, (ack->nextseq == EOF_SEQNUM && lar == fileSize - 1));
 				// if ((ack->nextseq - 1 == lar + 1) || (ack->nextseq == EOF_SEQNUM && (lar == fileSize - 1 || fileSize == 0))) {
 				// 	int nextLar = lar + 1;
 				// 	if (ack->nextseq != EOF_SEQNUM) {
@@ -463,17 +464,17 @@ void *receiveAck() {
 	// if (ack != NULL) {
 	// 	free(ack);
 	// }
-	printf("Terminating receiver thread\n");
+	// printf("Terminating receiver thread\n");
 	exit(0);
 	pthread_exit(NULL);
 }
 
 void *timeout() {
-	printf("Timeout thread started\n");
-	pthread_setname_np(pthread_self(), "timeoutThread");
+	// printf("Timeout thread started\n");
+	// pthread_setname_np(pthread_self(), "timeoutThread");
 
 	while (status != 3) {
-		usleep(1000);
+		usleep(100);
 		for (int i = 0; i < windowSize; ++i) {
 			if (timeoutTable[i] == 0) {
 				if (statusTable[i] == 0)
@@ -481,10 +482,13 @@ void *timeout() {
 			} else {
 				timeoutTable[i]--;
 			}
+			if (status == 3) {
+				exit(0);
+			}
 		}
 	}
 
-	printf("Terminating timeout thread\n");
+	// printf("Terminating timeout thread\n");
 	exit(0);
 	pthread_exit(NULL);
 }

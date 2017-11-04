@@ -2,206 +2,160 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <errno.h>
-#include <string.h>
+#include <sys/time.h>
+#include <time.h>
+#include <unistd.h>
 #include "frame.h"
 
-FILE * file;
+#define TIMEOUT 300000
 
-/**
- * Displays error message to stderr, then exits program with exitcode 1
- *
- * @param msg Error message
- */
-void handleError();
+uint32_t bufferSize;
 
-/**
- * Initializes buffer table
- */
-void initBufferTable(char* bufferTable, int size);
-
-/**
- * Flushes buffer to file
- */
-void flushBuffer(char* filename, char* buffer, int size);
-
-int main (int argc, char* argv[]){
-	int windowSize, bufferSize, advWindowSize;
-	int my_port, my_ipadr, my_sock;
-	int recv_len;
-	char* bufferTable;
-	char* receiverBuffer;
-	Segment* receivedSegment;
-	ACK ack;
-	struct sockaddr_in socket_my, socket_sender;
-	
-	//File* file2= fopen(argv[1],"w",stdout);
-
-	//Runtime var
-	uint32_t nextSeq, lfr, laf, seqnum;
-	int i, slen;
-	slen = sizeof(socket_sender);
-	
-	if(argc != 5){
-		printf( "Usage : ./recvfile <filename> <windowsize> <buffersize> <port>\n");
-		exit(1);
-	}
-	else{
-		////////////////////
-		// Initialization //
-		////////////////////
-		
-		// Read arguments
-		sscanf(argv[4], "%d", &my_port); // Receiving port
-		sscanf(argv[3], "%d", &bufferSize); // Buffer size
-		sscanf(argv[2], "%d", &windowSize); // Window size
-		
-		receiverBuffer = (char*) malloc(bufferSize * sizeof(char));
-		bufferTable = (char*) malloc(bufferSize * sizeof(char));
-		receivedSegment = (Segment*) malloc(sizeof(Segment));
-		
-		initBufferTable(bufferTable, bufferSize);
-		
-		
-		file = fopen(argv[1],"wb");
-		setvbuf(file, NULL, _IONBF, 4096);
-		
-		// Init variables
-		lfr = 0;
-		laf = lfr + windowSize;
-		nextSeq = 0;
-		advWindowSize = bufferSize;
-		
-		/////////////////////
-		// Socket Creation //
-		/////////////////////
-		
-		// Initialize socket
-		my_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-		if(my_sock == -1){
-			handleError();
-		}
-		
-		socket_my.sin_family = AF_INET;
-		socket_my.sin_port = htons(my_port);
-		socket_my.sin_addr.s_addr = htonl(INADDR_ANY);
-
-		// Binding socket address to port
-		if (bind(my_sock, (struct sockaddr*)&socket_my, sizeof(socket_my)) == -1){
-			int enable = 1;
-			if (setsockopt(my_sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
-				handleError();
-			}
-		}
-		
-		/////////////////////////
-		//  Segment Receiving  //
-		/////////////////////////
-		
-		printf( "Receiving on port :%d\n",my_port);
-		// Receive Data
-		do{
-			recv_len = recvfrom(my_sock, receivedSegment, 9, 0, (struct sockaddr *) &socket_sender, &slen);
-			fflush(stdout);
-			
-			if (recv_len != -1) {
-				//Process received data, check the checksum
-				if(receivedSegment->checksum == countSegmentChecksum(*receivedSegment)){
-					seqnum = receivedSegment->seqnum;
-					
-					printf( "Received Seqnum: %d, Data: %c\n",seqnum, receivedSegment->data);
-					printf( "LFR :%d ; LAF :%d\n",lfr, laf);
-					
-					if(seqnum % bufferSize >= lfr && seqnum % bufferSize <= laf && seqnum != -1){
-						//Check if the segment is the requested next, if it does put it in buffer
-						printf( "Data in between frame\n");
-						
-						if(bufferTable[seqnum % bufferSize] == 0x0){
-							receiverBuffer[seqnum % bufferSize] = receivedSegment->data;
-							bufferTable[seqnum] = 0x1;
-							advWindowSize -= 1;
-							printf( "Data %c is in buffer\n", receiverBuffer[seqnum % bufferSize]);
-						
-							if(nextSeq == seqnum){
-								printf( "Data Seqnum in correct sequence\n");
-								
-								i = lfr;
-								while(bufferTable[i] == 0x1){ // Find out the next sequence needed
-									i++;
-								}
-								lfr = i-1;
-								nextSeq = lfr+1;
-								laf = lfr + windowSize;
-								laf = (laf >= bufferSize) ? bufferSize - 1 : laf;
-							}
-							else{
-								printf( "Data Seqnum is out of order\n");
-							}
-							initACK(&ack, nextSeq, advWindowSize);
-						}
-						else{
-							i = lfr;
-							while(bufferTable[i] == 0x1){ // Find out the next sequence needed
-								i++;
-							}
-							initACK(&ack, i, advWindowSize);
-							nextSeq = i;
-						}
-						
-						printf( "Sending ACK nextseq = %d advwinsize = %d to %s:%d\n\n", nextSeq, advWindowSize, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
-						
-						if(advWindowSize == 0){
-							advWindowSize = bufferSize;
-							lfr = 0;
-							laf = lfr + windowSize;
-							flushBuffer(argv[1], receiverBuffer, bufferSize);
-							initBufferTable(bufferTable, bufferSize);
-						}
-						
-						if(sendto(my_sock, &ack, sizeof(ack), 0, (struct sockaddr*) &socket_sender, sizeof(socket_sender)) == -1){
-							printf( "Error : Failed to send ACK for seqnum %d\n", nextSeq);
-						}
-					}
-				}
-				else{
-					printf( "Received Misc Data: %x\n ", *receivedSegment);
-				}
-			}
-			else{
-				handleError();
-			}
-		} while(seqnum != -1);
-		initACK(&ack, -1, advWindowSize);
-		printf( "Sending ACK nextseq = %d to %s:%d\n", -1, inet_ntoa(socket_sender.sin_addr), ntohs(socket_sender.sin_port));
-		
-		if(sendto(my_sock, &ack, sizeof(ack), 0, (struct sockaddr*) &socket_sender, sizeof(socket_sender)) == -1){
-			printf( "Error : Failed to send ACK for seqnum %d\n", nextSeq);
-		}
-		flushBuffer(argv[1], receiverBuffer, bufferSize-advWindowSize);
-	}
-	fclose(stdout);
-	return 0;
-}
-
-void handleError(){
-	printf( "Error : %s\n", strerror(errno));
+void die(const char* msg) {
+    perror(msg);
 	exit(1);
 }
 
-void initBufferTable(char* bufferTable, int size){
+void flush(char* bufferTable) {
 	int i;
-	for(i = 0; i<size; i++){
-		bufferTable[i] = 0x0;
+	for (i = 0; i < bufferSize; i++) {
+		bufferTable[i] = 0;
 	}
 }
 
-void flushBuffer(char* filename, char* buffer, int size){
-	int i = 0;
-	printf( "\n\nBuffer full, write to file : \n");
-	for(i = 0; i<size; i++){
-		fprintf(file, "%c",buffer[i]);
-	}
-	printf( "\n\n");
+int main(int argc, char* argv[]) {
+    if (argc != 5) {
+        die("Usage : ./recvfile <filename> <windowsize> <buffersize> <port>");
+    }
+    
+    ////////////////////
+    // Initialization //
+    ////////////////////
+
+    // Scan arguments
+	const char* fileName = argv[1];
+	const uint32_t windowSize = 8;
+	bufferSize = 256;
+    const int destPort = atoi(argv[4]);
+
+    FILE* file = fopen(fileName, "w");
+    if (file == NULL) {
+		die("Error: Unable to open file");
+    }
+    char* buffer = (char*) malloc(bufferSize * sizeof(char));
+    char* bufferTable = (char*) malloc(bufferSize * sizeof(char));
+
+    /////////////////////
+	// Socket Creation //
+    /////////////////////
+
+	int udpSocket;
+	struct sockaddr_in srcAddr, destAddr;
+	uint32_t socketSize = sizeof(struct sockaddr_in);
+
+    // Socket creation
+	if ((udpSocket = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+		die("Error: Failed to initialize socket");
+    }
+
+    // Timeout setting
+	struct timeval timeout;
+	timeout.tv_sec = 0;
+	timeout.tv_usec = TIMEOUT;
+    setsockopt(udpSocket, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(struct timeval));
+    
+    // Setup destination address
+    destAddr.sin_family = AF_INET;
+	destAddr.sin_port = htons(destPort);
+    destAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    // Bind socket
+    if (bind(udpSocket, (struct sockaddr*) &destAddr, socketSize) == -1) {
+        int enable = 1;
+        if (setsockopt(udpSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+            die(strerror(errno));
+        }
+    }
+
+    /////////////////////////
+	//  Segment Receiving  //
+    /////////////////////////
+    
+    uint32_t lfr = 0;
+    uint32_t laf = windowSize;
+    uint32_t bufferCur = 0;
+    uint32_t bufferOffset = 0;
+    uint32_t advWindowSize = (windowSize < bufferSize) ? windowSize : bufferSize;
+    char done = 0;
+
+    flush(bufferTable);
+    srand(time(NULL));
+
+    while (!done) {
+        // printf("Receiver: Waiting for data...");
+        fflush(stdout);
+
+        Segment packet;
+        int32_t recvLen = recvfrom(udpSocket, (char*) &packet, sizeof(Segment), 0, (struct sockaddr*) &srcAddr, &socketSize);
+        if (recvLen != -1) {
+            if (packet.checksum == countSegmentChecksum(packet)) {
+                done = (packet.soh == 0x02);
+
+                // printf("Receiver: received packet #%u: %c\n", packet.seqnum, packet.data);
+                if (packet.seqnum >= lfr && packet.seqnum <= laf) {
+                    if (packet.seqnum == lfr) {
+                        lfr++;
+
+                        buffer[packet.seqnum - bufferOffset] = packet.data;
+                        bufferCur++;
+                        advWindowSize--;
+                        if (advWindowSize == 0) {
+                            advWindowSize = (windowSize < bufferSize) ? windowSize : bufferSize;
+                        }
+                    }
+                }
+
+                laf = lfr + ((windowSize < advWindowSize) ? windowSize : advWindowSize);
+                // printf("Receiver: LFR: %u, LAF: %u\n", lfr, laf);
+            } else {
+                // printf("Receiver: wrong checksum for packet #%u: %d | %d\n", packet.seqnum, packet.checksum, countSegmentChecksum(packet));
+            }
+        }
+
+        // Sending ACK
+        ACK ack;
+        initACK(&ack, lfr, advWindowSize);
+
+        // printf("Receiver: Sending ACK #%u\n", ack.nextseq);
+        int32_t sentLen = sendto(udpSocket, (char*) &ack, sizeof(ACK), 0, (struct sockaddr*) &srcAddr, socketSize);
+        if (sentLen == -1) {
+            die("Receiver: Error: Failed to send ACK");
+        }
+
+        // Write data to file
+        if (bufferCur == bufferSize) {
+            // printf("Receiver: Writing data to file\n");
+            bufferOffset += bufferSize;
+            bufferCur = 0;
+
+            for (uint32_t i = 0; i < bufferSize; ++i) {
+                fputc(buffer[i], file);
+            }
+        }
+    }
+
+    if (bufferCur != 0) {
+        printf("Receiver: Writing remaining data to file\n");
+
+        for (uint32_t i = 0; i < bufferCur; ++i) {
+            fputc(buffer[i], file);
+        }
+    }
+    printf("Receiver: All data received");
+    
+    fclose(file);
+    return 0;
 }

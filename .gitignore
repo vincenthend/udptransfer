@@ -1,6 +1,9 @@
 .vscode/
 driver.c
-TB1_K02_13_SebentarJugaKelar.zip
+*.zip
+*.o
+*.out
 recvfile
 sendfile
 out.txt
+log.txt

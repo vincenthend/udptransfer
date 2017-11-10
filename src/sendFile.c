@@ -52,8 +52,8 @@ int main(int argc, char* argv[]) {
     
     // Scan arguments
     const char* fileName = argv[1];
-	windowSize = 8;
-	bufferSize = 256;
+	windowSize = 128;
+	bufferSize = 4096;
 	const char* destIP = argv[4];
     const int destPort = atoi(argv[5]);
     

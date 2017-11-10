@@ -37,8 +37,8 @@ int main(int argc, char* argv[]) {
 
     // Scan arguments
 	const char* fileName = argv[1];
-	const uint32_t windowSize = 8;
-	bufferSize = 256;
+	const uint32_t windowSize = 128;
+	bufferSize = 4096;
     const int destPort = atoi(argv[4]);
 
     FILE* file = fopen(fileName, "w");
@@ -93,11 +93,9 @@ int main(int argc, char* argv[]) {
 
     flush(bufferTable);
     srand(time(NULL));
-
+	
     while (!done) {
         // printf("Receiver: Waiting for data...");
-        fflush(stdout);
-
         Segment packet;
         int32_t recvLen = recvfrom(udpSocket, (char*) &packet, sizeof(Segment), 0, (struct sockaddr*) &srcAddr, &socketSize);
         if (recvLen != -1) {
@@ -116,6 +114,11 @@ int main(int argc, char* argv[]) {
                             advWindowSize = (windowSize < bufferSize) ? windowSize : bufferSize;
                         }
                     }
+					
+					if (lfr % 1024 == 0) {
+						// printf("LFR = %d\n", lfr);
+						// fflush(stdout);
+					}
                 }
 
                 laf = lfr + ((windowSize < advWindowSize) ? windowSize : advWindowSize);
@@ -123,27 +126,27 @@ int main(int argc, char* argv[]) {
             } else {
                 // printf("Receiver: wrong checksum for packet #%u: %d | %d\n", packet.seqnum, packet.checksum, countSegmentChecksum(packet));
             }
-        }
+			
+			// Sending ACK
+			ACK ack;
+			initACK(&ack, lfr, advWindowSize);
 
-        // Sending ACK
-        ACK ack;
-        initACK(&ack, lfr, advWindowSize);
+			// printf("Receiver: Sending ACK #%u\n", ack.nextseq);
+			int32_t sentLen = sendto(udpSocket, (char*) &ack, sizeof(ACK), 0, (struct sockaddr*) &srcAddr, socketSize);
+			if (sentLen == -1) {
+				die("Receiver: Error: Failed to send ACK");
+			}
 
-        // printf("Receiver: Sending ACK #%u\n", ack.nextseq);
-        int32_t sentLen = sendto(udpSocket, (char*) &ack, sizeof(ACK), 0, (struct sockaddr*) &srcAddr, socketSize);
-        if (sentLen == -1) {
-            die("Receiver: Error: Failed to send ACK");
-        }
+			// Write data to file
+			if (bufferCur == bufferSize) {
+				// printf("Receiver: Writing data to file\n");
+				bufferOffset += bufferSize;
+				bufferCur = 0;
 
-        // Write data to file
-        if (bufferCur == bufferSize) {
-            // printf("Receiver: Writing data to file\n");
-            bufferOffset += bufferSize;
-            bufferCur = 0;
-
-            for (uint32_t i = 0; i < bufferSize; ++i) {
-                fputc(buffer[i], file);
-            }
+				for (uint32_t i = 0; i < bufferSize; ++i) {
+					fputc(buffer[i], file);
+				}
+			}
         }
     }
 
